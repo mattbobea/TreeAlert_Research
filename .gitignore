@@ -1,2 +1,11 @@
 .DS_Store
 Elec/time_series_15min_singleindex.csv
+Electricity/time_series_15min_singleindex.csv
+old code/
+Rplots.pdf
+Electricity5.png
+Electricity_Lift_Test.png
+Electricity_Lift_Train.png
+hr_viz.png
+winkler_lift_test.png
+winkler_lift_train.png

@@ -11,22 +11,32 @@ Libraries
 ```{r, include=FALSE, warning=FALSE, message=FALSE}
 library(readr); library(tidyr); library(feasts) # Data
 library(tsibble); library(fable); library(fabletools) # Forecasting
-library(dplyr); library(lubridate); library(gains)# Wrangling
+library(dplyr); library(lubridate) # Wrangling
 library(ggplot2); library(ggtext); library(grid); library(gridExtra) # Plotting
-library(slider); library(scales)
-library(rpart); library(rpart.plot); # library(caret)
-
+library(slider); library(scales); library(rpart); library(rpart.plot); 
+source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "tree_alert_functions.R"))
+# library(caret)
 # ============================================================
 # Load data
-# ============================================================
-heart_data_1 <- readRDS("~/Research/Eval Tree/Heart_Scripts/heart_combined.rds")
-heart_data_2 <- readRDS("~/Research/Eval Tree/Heart_Scripts/heart_new_data.rds")
+heart_dir <- if (dir.exists("Heart Rate")) "Heart Rate" else "."
+heart_data_1 <- readRDS(file.path(heart_dir, "heart_combined.rds"))
+heart_data_2 <- readRDS(file.path(heart_dir, "heart_new_data.rds"))
 ```
-# Select analysis  read codeif you decide you prefer percentile analysis
+# DONT SKIP--> Select analysis.  Choose option 2 if you prefer percentile analysis
 ```{r}
 # ============================================================
-# Merge metrics from heart_data_2 into heart_data_1
+# ANALYSIS TARGET SWITCH
 # ============================================================
+
+# Choose analysis target:
+# 1 = original .resid (default)
+# 2 = winkler_score
+# 3 = crps
+
+ANALYSIS_CHOICE <- 2
+
+#--------------------------
+# Merge metrics from heart_data_2 into heart_data_1
 
 heart_merged_clean <- heart_data_1 %>%
   left_join(
@@ -41,36 +51,18 @@ heart_merged_clean <- heart_data_1 %>%
     by = "Time"
   )
 
-# ============================================================
-# ANALYSIS TARGET SWITCH
-# ============================================================
-
-# Choose analysis target:
-# 1 = original .resid (default)
-# 2 = winkler_score
-# 3 = crps
-ANALYSIS_CHOICE <- 2
-
 if (ANALYSIS_CHOICE == 1) {
-
   message("Analysis target: original .resid (no changes)")
-
 } else if (ANALYSIS_CHOICE == 2) {
-
   message("Analysis target: winkler_score → .resid")
-
   heart_merged_clean <- heart_merged_clean %>%
     select(-.resid) %>%
     rename(.resid = winkler_score)
-
 } else if (ANALYSIS_CHOICE == 3) {
-
   message("Analysis target: crps → .resid")
-
   heart_merged_clean <- heart_merged_clean %>%
     select(-.resid) %>%
     rename(.resid = crps)
-
 } else {
   stop("Invalid ANALYSIS_CHOICE. Use 1 (.resid), 2 (winkler), or 3 (crps).")
 }
@@ -78,7 +70,6 @@ if (ANALYSIS_CHOICE == 1) {
 
 # ============================================================
 # Train / Test split (85 / 15)
-# ============================================================
 split_index <- floor(0.85 * nrow(heart_merged_clean))
 
 train_set <- heart_merged_clean[1:split_index, ]
@@ -129,82 +120,6 @@ create_monthly_plot <- function(data, start_date, end_date) {
   return(plot)
 }
 
-# ----- Lift Functions -----
-
-compute_lift_numeric <- function(df, actual_col, pred_col, n_groups = 50) {
-    
-  actual <- abs(df[[actual_col]])
-  score  <- abs(df[[pred_col]])
-  
-  # Sort by predicted risk
-  ord        <- order(score, decreasing = TRUE)
-  actual_ord <- actual[ord]
-  n          <- length(actual_ord)
-  
-  # Ventile grouping
-  group <- ceiling(seq_len(n) / (n / n_groups))
-  group[group > n_groups] <- n_groups
-  
-  df_lift <- data.frame(group = group, error = actual_ord) %>%
-    dplyr::group_by(group) %>%
-    dplyr::summarise(meanError = mean(error, na.rm = TRUE), .groups = "drop")
-  
-  # Normalize
-  df_lift$meanError <- df_lift$meanError / mean(actual_ord, na.rm = TRUE)
-  
-  # Return first ventile lift
-  df_lift$meanError[df_lift$group == 1]
-}
-
-make_lift_charts <- function(df, actual_col, pred_col, title_prefix = "Model") {
-  
-  actual <- abs(df[[actual_col]])
-  score  <- abs(df[[pred_col]])
-  
-  # Sort by predicted risk
-  ord <- order(score, decreasing = TRUE)
-  actual_ord <- actual[ord]
-  n <- length(actual_ord)
-  
-  # Cumulative gains
-  df_cum <- data.frame(
-    ncases  = c(0, seq_len(n)),
-    cumError = c(0, cumsum(actual_ord))
-  )
-  
-  # Ventiles
-  n_groups <- 50
-  group <- ceiling(seq_len(n) / (n / n_groups))
-  group[group > n_groups] <- n_groups
-  
-  df_lift <- data.frame(
-    group = group,
-    error = actual_ord
-  ) %>%
-    dplyr::group_by(group) %>%
-    dplyr::summarise(meanError = mean(error), .groups = "drop")
-  
-  df_lift$percentile <- df_lift$group * 5
-  df_lift$meanError  <- df_lift$meanError / mean(actual_ord)
-  
-  g1 <- ggplot(df_cum, aes(ncases, cumError)) +
-    geom_line(color = "#4682B4") +
-    geom_abline(slope = sum(actual_ord)/n, intercept = 0,
-                linetype = "dashed", color = "gray") +
-    labs(title = paste(title_prefix, "– Cumulative Gains"),
-         x = "# Cases", y = "Cumulative Error") +
-    theme_minimal()
-  
-  g2 <- ggplot(df_lift, aes(percentile, meanError)) +
-    geom_col(fill = "#FF8C00") +
-    labs(title = paste(title_prefix, "– Ventile Lift"),
-         x = "Percentile", y = "Ventile Mean / Global Mean") +
-    theme_minimal()
-  
-  gridExtra::grid.arrange(g1, g2, ncol = 2)
-  
-  df_lift$meanError[df_lift$percentile == 5]
-}
 ```
 Train train/test split
 ```{r, warning=FALSE}
@@ -229,131 +144,51 @@ heart_merged_with_leaf <- dplyr::bind_cols(heart_merged_clean, Leaf_Node = leaf_
 ```
 Lift 
 ```{r}
-compute_lift <- function(data, model, pred_col_name, label, plot = TRUE) {
-  
-  # Predict leaf values
-  leaf_nodes <- predict(model, newdata = data, type = "vector")
-  data_with_pred <- dplyr::bind_cols(data, !!pred_col_name := leaf_nodes)
-  
-  lift_value <- if (plot) {
-    make_lift_charts(
-      df         = data_with_pred,
-      actual_col = ".resid",
-      pred_col   = pred_col_name,
-      title_prefix = label
-    )
-  } else {
-    compute_lift_numeric(
-      df         = data_with_pred,
-      actual_col = ".resid",
-      pred_col   = pred_col_name
-    )
-  }
-  
-  cat(label, "Lift (First Quantile):", lift_value, "\n")
-  
-  return(list(
-    lift = lift_value,
-    merged_data = data_with_pred
-  ))
-}
-
-train_results <- compute_lift(train_set, tree_model, "Leaf_Node", "Baseline (Train)")
-test_results  <- compute_lift(test_set, tree_model, "Leaf_Node", "Baseline (Test)")
-full_results  <- compute_lift(heart_merged_clean, tree_model, "Leaf_Node", "Baseline (Full)")
+train_results <- tree_alert_compute_lift(
+  train_set, tree_model, "Leaf_Node", "Baseline (Train)",
+  plot = TRUE, n_groups = 20,
+  lift_label = "First Quantile",
+  axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
+)
+test_results <- tree_alert_compute_lift(
+  test_set, tree_model, "Leaf_Node", "Baseline (Test)",
+  plot = TRUE, n_groups = 20,
+  lift_label = "First Quantile",
+  axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
+)
 ```
 
 ## Grid Search: Joint Optimization of Tree Parameters + Predictor Variables  ##
 ```{r}
 ## ============================================================================
-## GRID SEARCH: Optimize Tree Parameters + Predictor Variables
-## Using the SAME Lift Metric as make_lift_charts (Ventile Mean / Global Mean)
+## GRID SEARCH: Optimize Tree Parameters ONLY
+## Fixed Predictors:
+## Hour + Minute + Weekday + Intensity + Steps_10
+## Using SAME Lift Metric
 ## ============================================================================
 
-# 1. Candidate predictors
-candidate_vars <- c(
-  "Hour", "Minute", "Weekday", #"WeekofMonth", "DayofMonth",
-  "Intensity", "Steps_10"
-)
+# 1. Fixed formula (NO variable combinations)
+fixed_formula <- .resid ~ Hour + Minute + Weekday + Intensity + Steps_10
 
-# 2. ALL non-empty combinations of predictors
-var_combinations <- unlist(
-  lapply(1:length(candidate_vars), function(k)
-    combn(candidate_vars, k, FUN = paste, collapse = " + "))
-)
-
-# 3. Parameter grid
+# 2. Parameter grid (ONLY tuning tree hyperparameters)
 param_grid <- expand.grid(
-  cp        = c(0, 0.0001, 0.001),
-  minbucket = c(5, 10, 20),
-  maxdepth  = c(5, 10, 15),
-  vars      = var_combinations,
-  stringsAsFactors = FALSE
+  cp        = c(0, 0.0001, 0.001, 0.005, 0.01),
+  minbucket = c(5, 10, 20, 30),
+  maxdepth  = c(5, 10, 15, 20, 25, 30)
 )
-
-# ----------------------------------------------------------------------------
-# MODEL EVALUATION FUNCTION
-# Uses compute_lift_numeric() exactly as your main lift code
-# ----------------------------------------------------------------------------
-evaluate_params <- function(params_row) {
-
-  cp        <- params_row$cp
-  minbucket <- params_row$minbucket
-  maxdepth  <- params_row$maxdepth
-  vars      <- params_row$vars
-
-  # Build formula dynamically
-  fmla <- as.formula(paste(".resid ~", vars))
-
-  # Train regression tree
-  model <- rpart(
-    fmla,
-    data = train_set,
-    method = "anova",
-    control = rpart.control(
-      cp        = cp,
-      minbucket = minbucket,
-      maxdepth  = maxdepth
-    )
-  )
-
-  # Predict on TRAIN SET
-  preds <- predict(model, newdata = train_set)
-
-  # Build temporary dataset to pass into compute_lift_numeric (df version)
-  tmp_df <- dplyr::bind_cols(train_set, Pred_Temp = preds)
-
-  # Compute top-ventile lift using SAME function as main analysis
-  lift_value <- compute_lift_numeric(
-    df       = tmp_df,
-    actual_col = ".resid",
-    pred_col   = "Pred_Temp",
-    n_groups = 20
-  )
-
-  # Return row of results
-  data.frame(
-    cp                 = cp,
-    minbucket          = minbucket,
-    maxdepth           = maxdepth,
-    vars               = vars,
-    first_ventile_lift = lift_value
-  )
-}
 
 # RUN GRID SEARCH
-results <- do.call(
-  rbind,
-  lapply(seq_len(nrow(param_grid)), function(i) {
-    evaluate_params(param_grid[i, , drop = FALSE])
-  })
+grid_search <- tree_alert_grid_search(
+  train_set = train_set,
+  formula = fixed_formula,
+  param_grid = param_grid,
+  n_groups = 20,
+  pred_col_name = "Pred_Temp"
 )
 
 # SELECT BEST MODEL
-best_params <- results %>%
-  dplyr::filter(!is.na(first_ventile_lift)) %>%
-  dplyr::arrange(dplyr::desc(first_ventile_lift)) %>%
-  dplyr::slice(1)
+results <- grid_search$results
+best_params <- grid_search$best_params
 
 cat("\n=============================\n")
 cat("  BEST TREE PARAMETERS FOUND\n")
@@ -367,23 +202,16 @@ Train Final Model using Best Parameters
 ###############################################################################
 
 # Build formula dynamically from best_params$vars
-final_formula <- as.formula(paste(".resid ~", best_params$vars))
+final_formula <- fixed_formula
 
-cat("\n=============================\n")
 cat("  FINAL MODEL FORMULA USED\n")
-cat("=============================\n")
 print(final_formula)
 
 # Train final rpart model
-best_tree_model <- rpart(
-  final_formula,
-  data = train_set,
-  method = "anova",
-  control = rpart.control(
-    cp        = best_params$cp,
-    minbucket = best_params$minbucket,
-    maxdepth  = best_params$maxdepth
-  )
+best_tree_model <- tree_alert_train_best_model(
+  train_set = train_set,
+  formula = final_formula,
+  best_params = best_params
 )
 
 # Display tree rules
@@ -405,51 +233,35 @@ print(head(heart_merged_with_leaf))
 ```
 # LIFT CHARTS FOR BEST GRID SEARCH MODEL (Train / Test / Full)
 ```{r}
-# Reuse the SAME compute_lift function
-compute_lift <- function(data, model, pred_col_name, label) {
-  
-  # Predict leaf node values
-  leaf_nodes <- predict(model, newdata = data, type = "vector")
-  
-  # Create a merged dataset (does NOT modify original)
-  data_with_pred <- dplyr::bind_cols(data, !!pred_col_name := leaf_nodes)
-  
-  # Compute lift
-  lift_value <- make_lift_charts(
-    df         = data_with_pred,
-    actual_col = ".resid",
-    pred_col   = pred_col_name,
-    title_prefix = label
-  )
-  
-  # Print and return results
-  cat(label, "Lift (First Ventile):", lift_value, "\n")
-  return(list(lift = lift_value, merged_data = data_with_pred))
-}
-
 # ---- Compute lift for BEST MODEL ----
-best_train   <- compute_lift(train_set,            best_tree_model, "Pred_Best", "Best Model (Train)")
-best_test    <- compute_lift(test_set,             best_tree_model, "Pred_Best", "Best Model (Test)")
-best_full    <- compute_lift(heart_merged_clean,   best_tree_model, "Pred_Best", "Best Model (Full)")
+best_train <- tree_alert_compute_lift(
+  train_set, best_tree_model, "Pred_Best", "Best Model (Train)",
+  plot = TRUE, n_groups = 20,
+  lift_label = "First Ventile",
+  axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
+)
+ggsave("winkler_lift_train.png", plot = last_plot(), width = 8, height = 6, dpi = 1000)
+best_test <- tree_alert_compute_lift(
+  test_set, best_tree_model, "Pred_Best", "Best Model (Test)",
+  plot = TRUE, n_groups = 20,
+  lift_label = "First Ventile",
+  axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
+)
+ggsave("winkler_lift_test.png", plot = last_plot(), width = 8, height = 6, dpi = 1000)
 ```
 Map rules to observations and  pull top 10 rules
 ```{r}
-# How many rows of tree rules would you like to use?
-start_row <- 1 # starting row of rule from top_resid_rules
-end_row <- 3   # ending row (should be <= 20). if last chart does not # # Ensure it's a standard data frame
+start_row <- 1
+end_row   <- 3
 
-# ------------Pull top 10 rules------------
-tree_rules$.resid <- as.numeric(tree_rules$.resid)
-tree_rules <- tree_rules[order(abs(tree_rules$.resid),
-                                      decreasing = TRUE), ]
-
-top_10_resid_list <- as.list(tree_rules$.resid) # not top 10 now
-last_column_index <- ncol(top_10_resid_list)
-color_string <- c("#9400D3", "#008000", "#0000FF", "#FF8C00", "#000066",
-                  "#FF00FF", "#AB0000", "#FF69B4", "#7B68EE", "#Ff0000", 
-                  "#7B68EE", "#20B2AA", "#703366", "#32CD32", "#CC6633", 
-                  "#C77CFF", "#8A2BE2", "#00FF7F", "#00BFFF", "#FFA500", 
-                  "#66CDAA", "#BA55D3", "#00CED1", "#4682B4", "#00FFFF")
+# ------------Pull top rules by leaf node value------------
+top_leaf_selection <- tree_alert_top_leaf_values(
+  data = heart_merged_with_leaf,
+  n_rules = end_row,
+  train_end_time = min(test_set$Time)
+)
+leaf_summary <- top_leaf_selection$leaf_summary
+top_k_leaf_values <- top_leaf_selection$top_leaf_values
 ```
 
 # THE PROGRAM -- appllies rules as filter and plots the results
@@ -458,20 +270,19 @@ color_string <- c("#9400D3", "#008000", "#0000FF", "#FF8C00", "#000066",
 list_of_dfs <- list() # Create an empty DataFrame to store the results
 for (i in start_row:end_row) {
 
-  # Pull the next iterative resid to filter by form the top 10 list
-  current_rule <- as.numeric(top_10_resid_list[[i]])
-  # round both to common decimal as heart_merged_with_leaf has 1 more decimal place
-  precision <- 3  
-  # Filter heart_merged_with_leaf
   filtered_data <- heart_merged_with_leaf %>%
-    filter(round(Leaf_Node, precision) == round(current_rule, precision))
-  #------------displays the rule text before each plot------------
-  first_row <- tree_rules[i, ]
+    as.data.frame() %>%
+    filter(Leaf_Node == top_k_leaf_values[i])
+  
+  # Find the rule row that matches the leaf node value
+  rule_row_index <- which.min(abs(as.numeric(tree_rules[, 1]) - top_k_leaf_values[i]))  # <-- fix
+  first_row <- tree_rules[rule_row_index, ]                                              # <-- fix
+  
   non_blank_cells <- first_row[first_row != ""]
   constructed_sentence <- paste(names(non_blank_cells), non_blank_cells, collapse = " ")
-    rule_text <- textGrob(constructed_sentence,
-                           gp = gpar(col = "black", fontsize = 9))
-    print(constructed_sentence)
+  rule_text <- textGrob(constructed_sentence, gp = gpar(col = "black", fontsize = 9))
+  print(constructed_sentence)
+  
   #------------Plot of filtered rules on fitted time scale------------
   post_rules_scatter_plot <- ggplot(filtered_data, 
                                     aes(x = Time, y = .resid)) + 
@@ -587,7 +398,8 @@ residual_plot <- ggplot(heart_merged_clean_filled, aes(x = Time)) +
                                       c("TRUE" = 1, "FALSE" = 16)) + 
   scale_shape_manual(values = c("TRUE" = 1, "FALSE" = 1)) +
   scale_color_manual(values = c("Actual" = "#00BFC4")) +
-  labs(title = "Errors", x = NULL, y = NULL, color = "Variable") +
+  # Change Title to from errors to Winkler Score / ect when option 2 is selected
+  labs(title = "Errors", x = NULL, y = NULL, color = "Variable") +   
   geom_vline(xintercept = min(test_set$Time, na.rm = TRUE), color = "red", 
              linetype = "dotted", size = 1) + theme_bw() +
   theme(legend.position = "none") + 
@@ -607,55 +419,4 @@ percent_above_10 <- mean(highlight_points$.resid > 10) * 100
 average_resid <- mean(highlight_points$.resid)
 cat("Percentage of values above 10:", percent_above_10, "%\n")
 cat("Average value of .resid column:", average_resid, "\n")
-```
-Grid search
-```{r}
-# # Define grid of parameters
-# cp_vals <- c(0, 0.0001, 0.001)
-# minbucket_vals <- c(5, 10, 20)
-# maxdepth_vals <- c(5, 10, 15)
-# 
-# param_grid <- expand.grid(cp = cp_vals,
-#                           minbucket = minbucket_vals,
-#                           maxdepth = maxdepth_vals)
-# 
-# # Safe evaluation function
-# eval_tree_lift <- function(cp, minbucket, maxdepth, train_set) {
-#   model <- rpart(.resid ~ Minute + Hour + Weekday + Intensity + Steps_10,
-#                  data = train_set,
-#                  method = "anova",
-#                  control = rpart.control(cp = cp,
-#                                          minbucket = minbucket,
-#                                          maxdepth = maxdepth))
-#   
-#   # Predict fitted values
-#   train_set$.fitted <- predict(model, newdata = train_set)
-#   actual_error <- abs(train_set$.resid)
-#   predicted_error <- train_set$.fitted
-#   
-#   # Compute gains
-#   gain <- tryCatch({
-#     gains(actual_error, predicted_error, groups = 20) #changes decile to 20
-#   }, error = function(e) {
-#     return(NULL)
-#   })
-#   
-#   # Extract first decile lift safely
-#   if (!is.null(gain) && 10 %in% gain$depth) {
-#     lift <- gain$mean.resp[gain$depth == 10] / mean(actual_error)
-#     return(lift)
-#   } else {
-#     return(NA_real_)
-#   }
-# }
-# 
-# # Run grid search
-# results <- param_grid %>%
-#   rowwise() %>%
-#   mutate(first_decile_lift = list(eval_tree_lift(cp, minbucket, maxdepth, heart_merged_with_leaf))) %>%
-#   unnest(cols = c(first_decile_lift)) %>%
-#   ungroup()
-# 
-# # Find best parameters
-# best_params <- results %>% arrange(desc(first_decile_lift)) %>% slice(1)
 ```

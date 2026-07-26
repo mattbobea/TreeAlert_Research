@@ -11,78 +11,22 @@ Libraries
 ```{r, include=FALSE, warning=FALSE, message=FALSE}
 library(readr); library(tidyr); library(feasts) # Data
 library(tsibble); library(fable); library(fabletools) # Forecasting
-library(dplyr); library(lubridate); library(gains)# Wrangling
+library(dplyr); library(lubridate) # Wrangling
 library(ggplot2); library(ggtext); library(grid); library(gridExtra) # Plotting
 library(slider); library(scales)
 library(rpart); library(rpart.plot); # library(caret)
-
-# ============================================================
-# Load data
-# ============================================================
-heart_data_1 <- readRDS("~/Research/Eval Tree/Heart_Scripts/heart_combined.rds")
-heart_data_2 <- readRDS("~/Research/Eval Tree/Heart_Scripts/heart_new_data.rds")
 ```
-# Select analysis  read codeif you decide you prefer percentile analysis
+Load Data
 ```{r}
-# ============================================================
-# Merge metrics from heart_data_2 into heart_data_1
-# ============================================================
+heart_dir <- if (dir.exists("Heart Rate")) "Heart Rate" else "."
+heart_merged_clean <- readRDS(file.path(heart_dir, "heart_new_data.rds"))
 
-heart_merged_clean <- heart_data_1 %>%
-  left_join(
-    heart_data_2 %>%
-      select(
-        Time,
-        crps,
-        winkler_score,
-        lower,
-        upper
-      ),
-    by = "Time"
-  )
+# Use Winkler score instead
+heart_merged_clean$.resid <- heart_merged_clean$winkler_score
 
-# ============================================================
-# ANALYSIS TARGET SWITCH
-# ============================================================
-
-# Choose analysis target:
-# 1 = original .resid (default)
-# 2 = winkler_score
-# 3 = crps
-ANALYSIS_CHOICE <- 2
-
-if (ANALYSIS_CHOICE == 1) {
-
-  message("Analysis target: original .resid (no changes)")
-
-} else if (ANALYSIS_CHOICE == 2) {
-
-  message("Analysis target: winkler_score → .resid")
-
-  heart_merged_clean <- heart_merged_clean %>%
-    select(-.resid) %>%
-    rename(.resid = winkler_score)
-
-} else if (ANALYSIS_CHOICE == 3) {
-
-  message("Analysis target: crps → .resid")
-
-  heart_merged_clean <- heart_merged_clean %>%
-    select(-.resid) %>%
-    rename(.resid = crps)
-
-} else {
-  stop("Invalid ANALYSIS_CHOICE. Use 1 (.resid), 2 (winkler), or 3 (crps).")
-}
-#.resid will be replaces with your choice but keep the same column name! 
-
-# ============================================================
-# Train / Test split (85 / 15)
-# ============================================================
 split_index <- floor(0.85 * nrow(heart_merged_clean))
-
 train_set <- heart_merged_clean[1:split_index, ]
-test_set  <- heart_merged_clean[(split_index + 1):nrow(heart_merged_clean), ]
+test_set <- heart_merged_clean[(split_index + 1):nrow(heart_merged_clean), ]
 ```
 Tree Alert Functions:
 ```{r}
@@ -128,10 +72,10 @@ create_monthly_plot <- function(data, start_date, end_date) {
   
   return(plot)
 }
-
-# ----- Lift Functions -----
-
-compute_lift_numeric <- function(df, actual_col, pred_col, n_groups = 50) {
+```
+Lift Function
+```{r}
+compute_lift_numeric <- function(df, actual_col, pred_col, n_groups = 20) {
     
   actual <- abs(df[[actual_col]])
   score  <- abs(df[[pred_col]])
@@ -173,7 +117,7 @@ make_lift_charts <- function(df, actual_col, pred_col, title_prefix = "Model") {
   )
   
   # Ventiles
-  n_groups <- 50
+  n_groups <- 20
   group <- ceiling(seq_len(n) / (n / n_groups))
   group[group > n_groups] <- n_groups
   
@@ -205,12 +149,6 @@ make_lift_charts <- function(df, actual_col, pred_col, title_prefix = "Model") {
   
   df_lift$meanError[df_lift$percentile == 5]
 }
-
-color_string <- c("#9400D3", "#008000", "#0000FF", "#FF8C00", "#000066",
-                  "#FF00FF", "#AB0000", "#FF69B4", "#7B68EE", "#Ff0000", 
-                  "#7B68EE", "#20B2AA", "#703366", "#32CD32", "#CC6633", 
-                  "#C77CFF", "#8A2BE2", "#00FF7F", "#00BFFF", "#FFA500", 
-                  "#66CDAA", "#BA55D3", "#00CED1", "#4682B4", "#00FFFF")
 ```
 Train train/test split
 ```{r, warning=FALSE}
@@ -228,11 +166,12 @@ tree_model <- rpart(.resid ~ Minute + Hour + Weekday + Intensity + Steps_10,
                     data = train_set, method = "anova", 
                     cp = 0.00000, minbucket = 10)
 tree_rules <- rpart.rules(tree_model, cover = FALSE, digits = 4, nn = FALSE)
-#Attached the predicted tree nodes to DF and Maps rules/leafs to Observations
 
+#Attached the predicted tree nodes to DF and Maps rules/leafs to Observations
 leaf_nodes <- predict(tree_model, newdata = heart_merged_clean, type = "vector") 
 heart_merged_with_leaf <- dplyr::bind_cols(heart_merged_clean, Leaf_Node = leaf_nodes)
 ```
+
 Lift 
 ```{r}
 compute_lift <- function(data, model, pred_col_name, label, plot = TRUE) {
@@ -256,7 +195,7 @@ compute_lift <- function(data, model, pred_col_name, label, plot = TRUE) {
     )
   }
   
-  cat(label, "Lift (First Quantile):", lift_value, "\n")
+  cat(label, "Lift (First Ventile):", lift_value, "\n")
   
   return(list(
     lift = lift_value,
@@ -397,7 +336,7 @@ cat("\n=============================\n")
 cat("        FINAL TREE RULES\n")
 cat("=============================\n")
 tree_rules <- rpart.rules(best_tree_model, cover = FALSE, digits = 4, nn = FALSE)
-#print(tree_rules)
+print(tree_rules)
 
 # Attach predicted leaf node averages to full dataset
 leaf_nodes <- predict(best_tree_model, newdata = heart_merged_clean, type = "vector")
@@ -409,7 +348,7 @@ cat(" ATTACHED LEAF NODE PREDICTIONS\n")
 cat("=============================\n")
 print(head(heart_merged_with_leaf))
 ```
-# LIFT CHARTS FOR BEST GRID SEARCH MODEL (Train / Test / Full)
+## LIFT CHARTS FOR BEST GRID SEARCH MODEL (Train / Test / Full)
 ```{r}
 # Reuse the SAME compute_lift function
 compute_lift <- function(data, model, pred_col_name, label) {
@@ -440,19 +379,21 @@ best_full    <- compute_lift(heart_merged_clean,   best_tree_model, "Pred_Best",
 ```
 Map rules to observations and  pull top 10 rules
 ```{r}
-start_row <- 1
-end_row   <- 3
+# How many rows of tree rules would you like to use?
+start_row <- 1 # starting row of rule from top_resid_rules
+end_row <- 4   # ending row (should be <= 20). if last chart does not # # Ensure it's a standard data frame
 
-# ------------Pull top rules by leaf node value------------
-leaf_summary <- heart_merged_with_leaf %>%
-  filter(Time < min(test_set$Time)) %>%   # train only
-  group_by(Leaf_Node) %>%
-  summarise(mean_resid = mean(.resid, na.rm = TRUE), .groups = "drop") %>%
-  arrange(desc(abs(mean_resid)))
-
-top_k_leaf_values <- leaf_summary %>%
-  slice(1:end_row) %>%
-  pull(Leaf_Node)
+# ------------Pull top 10 rules------------
+tree_rules$.resid <- as.numeric(tree_rules$.resid)
+tree_rules <- tree_rules[order(abs(tree_rules$.resid),
+                                      decreasing = TRUE), ]
+top_10_resid_list <- as.list(tree_rules$.resid) # not top 10 now
+last_column_index <- ncol(top_10_resid_list)
+color_string <- c("#9400D3", "#008000", "#0000FF", "#FF8C00", "#000066",
+                  "#FF00FF", "#AB0000", "#FF69B4", "#7B68EE", "#Ff0000", 
+                  "#7B68EE", "#20B2AA", "#703366", "#32CD32", "#CC6633", 
+                  "#C77CFF", "#8A2BE2", "#00FF7F", "#00BFFF", "#FFA500", 
+                  "#66CDAA", "#BA55D3", "#00CED1", "#4682B4", "#00FFFF")
 ```
 
 # THE PROGRAM -- appllies rules as filter and plots the results
@@ -461,9 +402,13 @@ top_k_leaf_values <- leaf_summary %>%
 list_of_dfs <- list() # Create an empty DataFrame to store the results
 for (i in start_row:end_row) {
 
+  # Pull the next iterative resid to filter by form the top 10 list
+  current_rule <- as.numeric(top_10_resid_list[[i]])
+  # round both to common decimal as heart_merged_with_leaf has 1 more decimal place
+  precision <- 3  
+  # Filter heart_merged_with_leaf
   filtered_data <- heart_merged_with_leaf %>%
-  filter(Leaf_Node == top_k_leaf_values[i])
-  
+    filter(round(Leaf_Node, precision) == round(current_rule, precision))
   #------------displays the rule text before each plot------------
   first_row <- tree_rules[i, ]
   non_blank_cells <- first_row[first_row != ""]

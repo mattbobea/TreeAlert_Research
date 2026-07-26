@@ -11,10 +11,11 @@ Libraries
 ```{r, include=FALSE, warning=FALSE, message=FALSE}
 library(readr); library(tidyr); library(feasts) # For Data
 library(tsibble); library(fable); library(fabletools) # For Forecasting
-library(dplyr); library(lubridate); library(gains) # For Data Wrangling
+library(dplyr); library(lubridate) # For Data Wrangling
 library(ggplot2); library(ggtext); library(grid); library(gridExtra); # Plot
 library(slider) # Plot
 library(scales); library(rpart);  library(rpart.plot);
+source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "tree_alert_functions.R"))
 ```
 Define Functions:
 ```{r}
@@ -135,84 +136,11 @@ create_monthly_plot <- function(data, start_date, end_date) {
   return(plot)
 }
 
-# -------------------- Lift Functions --------------------
-compute_lift_numeric <- function(df, actual_col, pred_col, n_groups = 20) {
-  actual <- abs(df[[actual_col]])
-  score  <- abs(df[[pred_col]])
-  ord        <- order(score, decreasing = TRUE)
-  actual_ord <- actual[ord]
-  n          <- length(actual_ord)
-  group <- ceiling(seq_len(n) / (n / n_groups))
-  group[group > n_groups] <- n_groups
-  df_lift <- data.frame(group = group, error = actual_ord) %>%
-    dplyr::group_by(group) %>%
-    dplyr::summarise(meanError = mean(error, na.rm = TRUE), .groups = "drop")
-  df_lift$meanError <- df_lift$meanError / mean(actual_ord, na.rm = TRUE)
-  df_lift$meanError[df_lift$group == 1]
-}
-
-compute_lift <- function(data, model, pred_col_name, label, plot = TRUE, n_groups = 20) {
-  data <- data %>% dplyr::select(-dplyr::any_of(pred_col_name))
-  leaf_nodes <- as.numeric(predict(model, newdata = data, type = "vector"))
-  data_with_pred <- dplyr::bind_cols(data, !!pred_col_name := leaf_nodes)
-  lift_value <- if (plot) {
-    make_lift_charts(df = data_with_pred, actual_col = ".resid", 
-                     pred_col = pred_col_name, title_prefix = label)
-  } else {
-    compute_lift_numeric(df = data_with_pred, actual_col = ".resid", 
-                         pred_col = pred_col_name, n_groups = n_groups)
-  }
-  cat(label, "Lift (First Ventile):", lift_value, "\n")
-  return(list(lift = lift_value, merged_data = data_with_pred))
-}
-
-make_lift_charts <- function(df, actual_col, pred_col, title_prefix = "Model") {
-  actual <- abs(df[[actual_col]])
-  score  <- abs(df[[pred_col]])
-  ord <- order(score, decreasing = TRUE)
-  actual_ord <- actual[ord]
-  n <- length(actual_ord)
-  
-  group <- ceiling(seq_len(n) / (n / n_groups))
-  group[group > n_groups] <- n_groups
-  
-  df_lift <- data.frame(group = group, error = actual_ord) %>%
-    dplyr::group_by(group) %>%
-    dplyr::summarise(meanError = mean(error), .groups = "drop")
-  
-  df_lift$meanError <- df_lift$meanError / mean(actual_ord)
-  
-  g2 <- ggplot(df_lift, aes(x = group, y = meanError)) + 
-    geom_col(fill = "#FF8C00") +
-    # Generates odd numbers: 1, 3, 5, 7, 9, 11, 13, 15, 17, 19
-    scale_x_continuous(breaks = seq(1, n_groups, by = 2)) + 
-    scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
-    labs(title = NULL, x = "Ventile", y = "Lift") + 
-    theme_minimal() +
-    theme(
-      panel.grid.minor = element_blank(),
-      panel.grid.major.x = element_line(color = "gray95"), # Subtle lines for each odd number
-      axis.title.x = element_text(size = 24, margin = margin(t = 10)),
-      axis.title.y = element_text(size = 24, margin = margin(r = 10)),
-      axis.text.x  = element_text(size = 24), # Slightly reduced to ensure 10 labels fit well
-      axis.text.y  = element_text(size = 24)
-    )
-  
-  print(g2)
-  
-  df_lift$meanError[df_lift$group == 1]
-}
-
-# Prep Parameters
-color_string <- c("#9400D3", "#008000", "#0000FF", "#FF8C00", "#000066",
-                  "#FF00FF", "#AB0000", "#FF69B4", "#7B68EE", "#Ff0000", 
-                  "#7B68EE", "#20B2AA", "#703366", "#32CD32", "#CC6633", 
-                  "#C77CFF", "#8A2BE2", "#00FF7F", "#00BFFF", "#FFA500", 
-                  "#66CDAA", "#BA55D3", "#00CED1", "#4682B4", "#00FFFF")
 ```
 Load files from Module 
 ```{r, warning=FALSE}
-raw_data <- read.csv("C:/Users/Kagebi/Documents/Research/time_series_15min_singleindex.csv") %>%
+elec_dir <- if (dir.exists("Electricity")) "Electricity" else "."
+raw_data <- read.csv(file.path(elec_dir, "time_series_15min_singleindex.csv")) %>%
   slice(-(1:5))
 ```
 # START!  
@@ -334,8 +262,18 @@ heart_merged_with_leaf <- dplyr::bind_cols(data_df, Leaf_Node = leaf_nodes)
 #Lift Analysis
 n_groups <- 20  # For lift
 
-train_results <- compute_lift(train_set, tree_model, "Leaf_Node", "Baseline (Train)", plot = TRUE)
-test_results  <- compute_lift(test_set,  tree_model, "Leaf_Node", "Baseline (Test)",  plot = TRUE)
+train_results <- tree_alert_compute_lift(
+  train_set, tree_model, "Leaf_Node", "Baseline (Train)",
+  plot = TRUE, n_groups = n_groups,
+  lift_label = "First Ventile",
+  axis_title_size = 24, axis_text_x_size = 24, axis_text_y_size = 24
+)
+test_results <- tree_alert_compute_lift(
+  test_set, tree_model, "Leaf_Node", "Baseline (Test)",
+  plot = TRUE, n_groups = n_groups,
+  lift_label = "First Ventile",
+  axis_title_size = 24, axis_text_x_size = 24, axis_text_y_size = 24
+)
 ```
 
 # Grid Search: Joint Optimization of Tree Parameters + Predictor Variables  ##
@@ -350,53 +288,19 @@ param_grid <- expand.grid(
   stringsAsFactors = FALSE
 )
 
-# Model Evaluation Function
-evaluate_params <- function(params_row) {
-  cp        <- params_row$cp
-  minbucket <- params_row$minbucket
-  maxdepth  <- params_row$maxdepth
-
-  model <- rpart(.resid ~ Hour + Minute + Weekday,
-    data   = train_set,
-    method = "anova",
-    control = rpart.control(
-      cp        = cp,
-      minbucket = minbucket,
-      maxdepth  = maxdepth
-    )
-  )
-
-  train_pred <- predict(model, newdata = train_set, type = "vector")
-  train_df   <- dplyr::bind_cols(train_set, Leaf_Node = train_pred)
-
-  lift_value <- compute_lift_numeric(
-    df         = train_df,
-    actual_col = ".resid",
-    pred_col   = "Leaf_Node",
-    n_groups   = n_groups        # ← now uses global n_groups
-  )
-
-  data.frame(
-    cp                 = round(cp, 6),
-    minbucket          = as.integer(minbucket),
-    maxdepth           = as.integer(maxdepth),
-    first_ventile_lift = lift_value
-  )
-}
-
 # RUN GRID SEARCH
-results <- do.call(
-  rbind,
-  lapply(seq_len(nrow(param_grid)), function(i) {
-    evaluate_params(param_grid[i, , drop = FALSE])
-  })
+grid_search <- tree_alert_grid_search(
+  train_set = train_set,
+  formula = .resid ~ Hour + Minute + Weekday,
+  param_grid = param_grid,
+  n_groups = n_groups,
+  pred_col_name = "Leaf_Node",
+  cp_digits = 6
 )
 
 # SELECT BEST MODEL
-best_params <- results %>%
-  dplyr::filter(!is.na(first_ventile_lift)) %>%
-  dplyr::arrange(dplyr::desc(first_ventile_lift)) %>%
-  dplyr::slice(1)
+results <- grid_search$results
+best_params <- grid_search$best_params
 
 cat("\n=============================\n")
 cat("  BEST TREE PARAMETERS FOUND\n")
@@ -416,12 +320,10 @@ cat("=============================\n")
 print(final_formula)
 
 # Train final rpart model
-best_tree_model <- rpart(final_formula, data = train_set, method = "anova",
-  control = rpart.control(
-    cp        = best_params$cp,
-    minbucket = best_params$minbucket,
-    maxdepth  = best_params$maxdepth
-  )
+best_tree_model <- tree_alert_train_best_model(
+  train_set = train_set,
+  formula = final_formula,
+  best_params = best_params
 )
 
 # Display tree rules
@@ -438,31 +340,44 @@ heart_merged_with_leaf <- dplyr::bind_cols(data_df, Leaf_Node = leaf_nodes)
 #print(head(heart_merged_with_leaf))
 
 # ---- Train lift (Best model) ----
-best_train_lift <- compute_lift_numeric(
-  df         = train_set %>% dplyr::bind_cols(Leaf_Node = predict(best_tree_model, newdata = train_set)),
-  actual_col = ".resid", pred_col = "Leaf_Node", n_groups = 20
-)
+best_train_lift <- tree_alert_compute_lift(
+  train_set, best_tree_model, "Leaf_Node", "Best Model (Train)",
+  plot = FALSE, n_groups = n_groups,
+  lift_label = "First Ventile"
+)$lift
 
 # ---- Test lift (Best model) ----
-best_test_lift <- compute_lift_numeric(
-  df         = test_set %>% dplyr::bind_cols(Leaf_Node = predict(best_tree_model, newdata = test_set)),
-  actual_col = ".resid", pred_col = "Leaf_Node", n_groups = 20
-)
+best_test_lift <- tree_alert_compute_lift(
+  test_set, best_tree_model, "Leaf_Node", "Best Model (Test)",
+  plot = FALSE, n_groups = n_groups,
+  lift_label = "First Ventile"
+)$lift
 
 # ---- Full-sample lift (Best model) ----
-best_full_lift <- compute_lift_numeric(
-  df         = heart_merged_with_leaf,
-  actual_col = ".resid", pred_col = "Leaf_Node", n_groups = 20
-)
+best_full_lift <- tree_alert_compute_lift(
+  data_df, best_tree_model, "Leaf_Node", "Best Model (Full)",
+  plot = FALSE, n_groups = n_groups,
+  lift_label = "First Ventile"
+)$lift
 
 cat(" BEST GRID SEARCH MODEL LIFT\\n")
 cat("Train Lift (First Ventile):", best_train_lift, "\\n")
 cat("Test  Lift (First Ventile):", best_test_lift,  "\\n")
 
 # ---- Lift Charts for Best Model ----
-best_train_results <- compute_lift(train_set, best_tree_model, "Leaf_Node", "Best Model (Train)", plot = TRUE)
+best_train_results <- tree_alert_compute_lift(
+  train_set, best_tree_model, "Leaf_Node", "Best Model (Train)",
+  plot = TRUE, n_groups = n_groups,
+  lift_label = "First Ventile",
+  axis_title_size = 24, axis_text_x_size = 24, axis_text_y_size = 24
+)
  ggsave("Electricity_Lift_Train.png", plot = last_plot(), width = 8, height = 6, dpi = 1200)
-best_test_results  <- compute_lift(test_set,  best_tree_model, "Leaf_Node", "Best Model (Test)",  plot = TRUE)
+best_test_results <- tree_alert_compute_lift(
+  test_set, best_tree_model, "Leaf_Node", "Best Model (Test)",
+  plot = TRUE, n_groups = n_groups,
+  lift_label = "First Ventile",
+  axis_title_size = 24, axis_text_x_size = 24, axis_text_y_size = 24
+)
  ggsave("Electricity_Lift_Test.png", plot = last_plot(), width = 8, height = 6, dpi = 1200)
 ```
 Map rules to observations and  pull top 10 rules
@@ -472,9 +387,12 @@ start_row <- 1 # starting row of rule from top_resid_rules
 end_row <- 4   # ending row (should be <= 20). if last chart does not # # Ensure it's a standard data frame
 
 # ------------Pull top 10 rules------------
-tree_rules$.resid <- as.numeric(tree_rules$.resid)
-tree_rules <- tree_rules[order(abs(tree_rules$.resid),
-                                      decreasing = TRUE), ]
+top_rule_selection <- tree_alert_select_rule_resids(
+  tree_rules = tree_rules,
+  start_row = start_row,
+  end_row = end_row
+)
+tree_rules <- top_rule_selection$tree_rules
 # # ------------Pull top rules using tail method (95th percentile)------------
 # tree_rules$.resid <- as.numeric(tree_rules$.resid)
 # 
@@ -497,13 +415,8 @@ tree_rules <- tree_rules[order(abs(tree_rules$.resid),
 # tree_rules$tail95 <- NULL
 
 
-top_10_resid_list <- as.list(tree_rules$.resid) # not top 10 now
-last_column_index <- ncol(top_10_resid_list)
-color_string <- c("#9400D3", "#008000", "#0000FF", "#FF8C00", "#000066",
-                  "#FF00FF", "#AB0000", "#FF69B4", "#7B68EE", "#Ff0000", 
-                  "#7B68EE", "#20B2AA", "#703366", "#32CD32", "#CC6633", 
-                  "#C77CFF", "#8A2BE2", "#00FF7F", "#00BFFF", "#FFA500", 
-                  "#66CDAA", "#BA55D3", "#00CED1", "#4682B4", "#00FFFF")
+top_10_resid_list <- top_rule_selection$rule_values # not top 10 now
+last_column_index <- length(top_10_resid_list)
 ```
 
 # THE PROGRAM -- appllies rules as filter and plot results
@@ -700,6 +613,44 @@ cat("Precision:", round(precision_test * 100, 2), "%\n")
 ```
 ```{r}
 # Mean Error Lift: Flagged vs All Observations
+
+if (!exists("train_metrics") || !exists("test_metrics")) {
+  train_filtered <- heart_merged_with_leaf %>%
+    filter(Time >= as.POSIXct(train_start, tz = "UTC") &
+           Time <  as.POSIXct(train_end,   tz = "UTC"))
+
+  test_filtered <- heart_merged_with_leaf %>%
+    filter(Time >= as.POSIXct(test_start, tz = "UTC") &
+           Time <  as.POSIXct(test_end,   tz = "UTC"))
+
+  flagged_data <- bind_rows(list_of_dfs)
+
+  flagged_times <- flagged_data %>%
+    filter(Time >= as.POSIXct(train_start, tz = "UTC") &
+           Time <  as.POSIXct(train_end,   tz = "UTC")) %>%
+    pull(Time)
+
+  flagged_times_test <- flagged_data %>%
+    filter(Time >= as.POSIXct(test_start, tz = "UTC") &
+           Time <  as.POSIXct(test_end,   tz = "UTC")) %>%
+    pull(Time)
+
+  train_metrics <- train_filtered %>%
+    mutate(
+      is_actual_extreme = (.resid >= top_5_percent_value | .resid <= bottom_5_percent_value),
+      is_flagged = Time %in% flagged_times,
+      true_positive = is_actual_extreme & is_flagged,
+      false_positive = !is_actual_extreme & is_flagged
+    )
+
+  test_metrics <- test_filtered %>%
+    mutate(
+      is_actual_extreme = (.resid >= top_5_percent_value | .resid <= bottom_5_percent_value),
+      is_flagged = Time %in% flagged_times_test,
+      true_positive = is_actual_extreme & is_flagged,
+      false_positive = !is_actual_extreme & is_flagged
+    )
+}
 
 # ---- Train Set ----
 mean_error_flagged_train <- train_metrics %>%

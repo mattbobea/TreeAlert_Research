@@ -22,6 +22,7 @@ library(dplyr); library(lubridate) # For Data Wrangling
 library(ggplot2); library(ggtext); library(grid); library(gridExtra); # Plot
 library(slider)# Plot
 library(scales); library(rpart);  library(rpart.plot);
+source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "tree_alert_functions.R"))
 ```
 Define Functions:
 ```{r}
@@ -129,12 +130,6 @@ create_monthly_plot <- function(data, start_date, end_date) {
   return(plot)
 }
 
-# Prep Parameters
-color_string <- c("#9400D3", "#008000", "#0000FF", "#FF8C00", "#000066",
-                  "#FF00FF", "#AB0000", "#FF69B4", "#7B68EE", "#Ff0000", 
-                  "#7B68EE", "#20B2AA", "#703366", "#32CD32", "#CC6633", 
-                  "#C77CFF", "#8A2BE2", "#00FF7F", "#00BFFF", "#FFA500", 
-                  "#66CDAA", "#BA55D3", "#00CED1", "#4682B4", "#00FFFF")
 ```
 Load files from Module A
 ```{r, warning=FALSE}
@@ -285,35 +280,18 @@ leaf_nodes <- predict(tree_model, newdata = data_df, type = "vector")
 heart_merged_with_leaf <- dplyr::bind_cols(data_df, Leaf_Node = leaf_nodes)
 
 # ------------Pull top 3 positive and top 3 negative rules------------
-
-# Ensure .resid is numeric and clean
-tree_rules$.resid <- as.numeric(tree_rules$.resid)
-
-# Create a simplified DataFrame with index for tracking
-tree_rules_df <- tibble(
-  row_id = 1:nrow(tree_rules),
-  resid = tree_rules$.resid
+rule_selection <- tree_alert_select_positive_negative_rules(
+  tree_rules = tree_rules,
+  n_positive = 3,
+  n_negative = 3
 )
-
-# Separate top 3 positive and top 3 negative residuals
-positive_rules <- tree_rules_df %>%
-  filter(resid > 0) %>%
-  arrange(desc(resid)) %>%
-  slice(1:3)
-
-negative_rules <- tree_rules_df %>%
-  filter(resid < 0) %>%
-  arrange(resid) %>%
-  slice(1:3)
-
-# Combine the selected rules
-selected_rules <- bind_rows(positive_rules, negative_rules)
+selected_rules <- rule_selection$selected_rules
 
 # Create list of residuals
-top_resid_list <- as.list(selected_rules$resid)
+top_resid_list <- rule_selection$rule_values
 
 # For rule texts, track row indices
-selected_rule_rows <- selected_rules$row_id
+selected_rule_rows <- rule_selection$rule_rows
 
 # Update start and end indices for loop
 start_row <- 1

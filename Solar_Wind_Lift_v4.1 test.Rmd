@@ -22,7 +22,7 @@ Libraries
 options(scipen = 999)
 library(readr); library(tidyr); library(feasts); library(scoringRules) # For Data
 library(tsibble); library(fable); library(fabletools) # For Forecasting
-library(dplyr); library(lubridate); library(gains) # For Data Wrangling
+library(dplyr); library(lubridate) # For Data Wrangling
 library(ggplot2); library(ggtext); library(grid); library(gridExtra); # Plot
 library(slider) # Plot
 library(scales); library(rpart);  library(rpart.plot);
