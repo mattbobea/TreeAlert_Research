@@ -1,0 +1,786 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
+%%	Author Submission Template for INFORMS Journal on Data Science (IJDS)
+%%	INFORMS, <informs@informs.org>
+%%	Ver. 1.00, June 2024
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% Use dblanonrev for Double Anonymous Review submission
+% Use sglanonrev for Single Anonymous Review submission
+% For example, submission to Operations Research, OPRE will have
+% \documentclass[opre,dblanonrev]{informs4}
+%
+% \documentclass[ijds,dblanonrev]{informs4}
+\documentclass[ijds,sglanonrev]{informs4}
+\usepackage{eqndefns-left} % For checking the display equation width and equation environment definitions %
+\RequirePackage{tgtermes}
+\RequirePackage{newtxtext}
+\RequirePackage{newtxmath}
+\RequirePackage{bm}
+\RequirePackage{endnotes}
+
+%\OneAndAHalfSpacedXI
+\OneAndAHalfSpacedXII % Current default line spacing
+%%\DoubleSpacedXI
+%%\DoubleSpacedXII
+
+% Optional LaTeX Packages
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+% Private macros here (check that there is no clash with the style)
+
+% Natbib setup for author-number style
+\usepackage{natbib}
+ \bibpunct[, ]{(}{)}{,}{a}{}{,}%
+ \def\bibfont{\small}%
+ \def\bibsep{\smallskipamount}%
+ \def\bibhang{24pt}%
+ \def\newblock{\ }%
+ \def\BIBand{and}%
+
+% Additional packages (kept from original manuscript)
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+\usepackage{booktabs}
+\usepackage{threeparttable}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{placeins}
+\usepackage[table,xcdraw]{xcolor}
+\usepackage{caption}
+\captionsetup[table]{position=bottom,format=plain,
+  justification=centering,singlelinecheck=false,skip=6pt}
+\captionsetup[figure]{skip=4pt} % reduces space between figure and caption
+
+\setlength{\textfloatsep}{4pt plus 1pt minus 1pt}
+\setlength{\floatsep}{2pt plus 1pt minus 1pt}
+\setlength{\intextsep}{4pt plus 1pt minus 1pt}
+\setlength{\abovecaptionskip}{2pt}
+\setlength{\belowcaptionskip}{0pt}
+
+
+\newtheorem{principle}{Principle}
+\newenvironment{scenario}[1]{%
+  \par\vspace{1ex}\noindent\textbf{#1}\par\vspace{0.5ex}}{\par}
+
+%% Setup of the equation numbering system. Outcomment only one.
+%% Preferred default is the first option.
+\EquationsNumberedThrough    % Default: (1), (2), ...
+
+\TheoremsNumberedThrough     % Preferred (Theorem 1, Lemma 1, Theorem 2)
+\ECRepeatTheorems  %  
+
+% For new submissions, leave this number blank.
+% For revisions, input the manuscript number assigned by the on-line
+% system along with a suffix ".Rx" where x is the revision number.
+\MANUSCRIPTNO{IJDS-0001-2024.00}
+
+%%%%%%%%%%%%%%%%
+\begin{document}
+%%%%%%%%%%%%%%%%
+
+% Outcomment only when entries are known. Otherwise leave as is and
+%   default values will be used.
+%\setcounter{page}{1}
+%\VOLUME{00}%
+%\NO{0}%
+%\MONTH{Xxxxx}% (month or a similar seasonal id)
+%\YEAR{0000}% e.g., 2005
+%\FIRSTPAGE{000}%
+%\LASTPAGE{000}%
+%\SHORTYEAR{00}% shortened year (two-digit)
+%\ISSUE{0000} %
+%\LONGFIRSTPAGE{0001} %
+%\DOI{10.1287/xxxx.0000.0000}%
+
+% Author's names for the running heads
+% Sample depending on the number of authors;
+% \RUNAUTHOR{Jones}
+% \RUNAUTHOR{Jones and Wilson}
+% \RUNAUTHOR{Jones, Miller, and Wilson}
+% \RUNAUTHOR{Jones et al.} % for four or more authors
+% Enter authors following the given pattern:
+%\RUNAUTHOR{}
+\RUNAUTHOR{Bobea et al.}
+
+% Title or shortened title suitable for running heads. Sample:
+% \RUNTITLE{Predictive Maintenance in Manufacturing}
+% Enter the (shortened) title:
+\RUNTITLE{TreeAlert: A Method for Predicting Extreme Forecasting Failures}
+
+% Enter the full title:
+\TITLE{When Will Your Model Fail?\\TreeAlert: A Method for Predicting Extreme Forecasting Failures}
+
+% Block of authors and their affiliations starts here:
+% NOTE: Authors with same affiliation, if the order of authors allows,
+%   should be entered in ONE field, separated by a comma.
+%   \EMAIL field can be repeated if more than one author
+%\AUTHOR{John Doe,\textsuperscript{a} Jane Smith,\textsuperscript{b}}
+%\AFF{\textsuperscript{a}Department of Industrial Engineering, University of XYZ, \EMAIL{john.doe@xyz.edu; \textsuperscript{b}Department of Computer Science, University of ABC, \EMAIL{jane.smith@abc.edu}} 
+
+
+% \ARTICLEAUTHORS{%
+% \AUTHOR{Matthew Ray Bobea\textsuperscript{a,*}, Galit Shmueli\textsuperscript{a}, Soumya Ray\textsuperscript{a}}
+% \AFF{\textsuperscript{a}Institute of Service Science, National Tsing Hua University, Hsinchu, Taiwan,\\
+% \EMAIL{matt.bobea@iss.nthu.edu.tw}, \EMAIL{galit.shmueli@iss.nthu.edu.tw}, \EMAIL{soumya.ray@iss.nthu.edu.tw}}%
+% }
+
+\ABSTRACT{%
+% Enter your abstract
+The heavy reliance on time-series forecasting in critical decisions gives rise to an urgent need to address extreme forecasting failures that significantly impact organizations. Such errors can arise due to the nature of forecasting algorithms and their interaction with data patterns. To advance the design of tools that predict such failures, we introduce a set of eight foundational principles for developing pattern-based error prediction methods. These principles generalize across forecasting scenarios and modeling approaches to guide the creation of interpretable, anticipatory, and operationally-integrable failure prediction tools. Guided by these principles, we develop TreeAlert, a novel method designed to identify patterns of extreme forecasting errors and predict the timing of future extreme failures. TreeAlert uses regression trees to detect failure-prone conditions and explicitly links them to contextual and timing patterns. We translate these conditions into human-understandable rules to generate actionable insights and facilitate stakeholder understanding. By forecasting the timings and context of future failure periods, TreeAlert transforms retrospective error analysis into a forward-looking tool that empowers decision-makers to proactively anticipate vulnerabilities, and for data scientists to improve algorithmic weaknesses. We demonstrate TreeAlert on electricity demand forecasts and heart rate data from an IoT device. This paper makes several contributions: it proposes a generalizable framework for predicting pattern-based model failures; it presents TreeAlert as a model-agnostic, interpretable, and operationally-integrable method; and it expands the field of error analysis by shifting focus from the magnitude of errors to the prediction of when extreme failures are likely to occur.
+}%
+
+% \FUNDING{This research was supported the National Science and Technology Council (NSTC), Taiwan (Grant No. 114-2410-H-007-092-MY3)}
+
+%Supplemental Material:
+%Data Ethics & Reproducibility Note:
+
+% Fill in data. If unknown, outcomment the field
+\KEYWORDS{Error Analysis, Time Series Forecasting, Regression Tree, Machine Learning, Decision Making} 
+%\HISTORY{Received: Month DD, YYYY; Accepted: Month DD, YYYY; Published Online: Month DD, YYYY}
+
+\maketitle
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Text of your paper here
+
+\section{Introduction}\label{sec:Intro}
+Modern decisions relating to purchasing, marketing, manufacturing, staffing, financial planning, logistics, and emergency medical services are often dependent on time-series forecasts \citep{abreu2023, fildes2006}. Digital transformation across industries has enabled increasingly diverse and voluminous data collection that, coupled with enhanced granularity, has led to improved forecast accuracy \citep{chae2024}. In parallel, researchers have developed various time series forecasting models and forecasting support systems (FSS), which are decision support systems specialized for forecasting, to facilitate forecasting and support decision making \citep{asimakopoulos2013, fildes2006, petropoulos2022}. 
+
+However, the efficacy of decisions derived from these FSSs is bounded by the forecasting model’s inherent limitations and our comprehension of those constraints. In spite of their sophistication, even properly tuned forecasting models often produce systematic errors \citep{eyuboglu2022}. These errors reflect deviations of the forecasts from the actual values. If these systematic errors exceed the acceptable threshold for a domain, we call them \emph{patterns of extreme forecast failures}, or simply %which we will refer to more simply as 
+\emph{extreme failure patterns}.
+
+Predicting potential model failures is crucial for ensuring safety in model deployment, especially for applications with serious consequences \citep{tsiligkaridis2021}. We use the term \emph{failure} to imply errors with practical consequences. Extreme failures can significantly impact organizations by resulting in inaccurate stocking decisions \citep{boylan2021}, pose challenges to the operation and planning of the electricity market \citep{zhu2025}, increase manufacturing costs \citep{sanders2009}, and result in wasted resources and business failures \citep{chae2024}. Understanding and mitigating these extreme failures is therefore essential, as the consequences encompass organizational viability and public safety.
+
+Periods with high risk of extreme forecast failure present a particular challenge for decision-makers because the reliability of forecasts may degrade under certain conditions, directly undermining the quality of forecast-driven decisions. For example, in emergency medical services operations, demand behavior is influenced not only by the month, day of the week, or hour of  day, but also by contextual information such as weather, population age, and the effect of special days \citep{abreu2023}. When these high risk periods are overlooked, forecasts can fail during critical periods.
+
+Identifying when and how extreme failures might arise can be of great help to stakeholders of FSS. Knowing when forecasts are likely to fail could allow managers to mitigate the risks associated with potential failures, set realistic expectations for a forecasting model's performance, and better communicate the model's reliability and applicability to stakeholders \citep{cakmak2024}. Identifying temporal and contextual predictors could help managers understand when (and possibly why) extreme failures take place, and help them make proactive adjustments during periods of elevated risk. For data scientists, identifying extreme failure patterns can highlight areas where the model requires further refinement, such as incorporating additional training data, feature engineering, or model adjustments \citep{cakmak2024}. 
+
+It is challenging to identify risky periods in which extreme forecast failures are likely because these patterns can be obscured by noise, anomalies, high-dimensional feature spaces, irregular seasonal structures, or the scale and complexity of big data environments. This complexity makes them difficult to detect without data-driven methods. Patterns of extreme forecast failures may arise due to structural complexities in the data or the model’s failure to capture regime shifts. For instance, complex seasonal patterns and excessive zero values can contribute to these extreme errors. Additionally, models that adjust slowly following very high or low values may produce patterns of extreme errors. Patterns of extreme errors can occur even when standard forecasting models, such as smoothing algorithms, ARIMA models, regression models, or more complex neural networks, are properly employed. Current time series forecasting approaches can struggle to detect extreme failures due to data complexity, visualization limitations, and inadequate metrics. Fine-grained data can amplify noise, while aggregation might smooth over systematic errors, obscuring failure patterns. Automated forecasting tools often focus on minimizing some overall error metric, overlooking extreme failure patterns. Traditional error metrics like RMSE and MAPE will favor models that minimize overall error even if they fail consistently during a small number of periods. 
+
+Despite the ramifications of extreme failures, predicting and understanding the timing of forecasting failures is currently an underexplored area of research. This work to develop a systematic method for addressing these challenges. We begin by examining how temporal and contextual patterns of extreme errors emerge from interactions between model behavior and data structure. Integrating these insights with considerations for managerial decision-making, FSS design, sustainability, and gaps in current forecasting methods, we develop a framework that articulates eight foundational principles for predicting extreme forecast failures. We formalize these principles to not only guide the design of our method but also provide a foundation for the development of future methods that aim to predict the timing of model failures. 
+
+Guided by this framework, we construct TreeAlert---a methodological artifact that aligns with the eight principles. TreeAlert is designed for predicting the timings and context of extreme failure patterns in time series forecasting. TreeAlert identifies extreme failure patterns with its failure-prone conditions, generates human-readable outputs that enable actionable insights and model improvements, and is capable of predicting the timing and context of future failure periods. Lastly, TreeAlert enables evaluating the performance of failure predictions by comparing anticipated extreme failure patterns with actual outcomes. This assessment ensures the reliability of the method and provides feedback for iterative refinement.
+
+This paper has several contributions. First, it introduces a generalizable design framework for predicting pattern-based model failures. Second, it proposes TreeAlert as a model-agnostic, interpretable, and operationally integrable method capable of detecting diverse error patterns and predicting periods of extreme model failure. Third, this work makes a theoretical contribution to the machine learning field of error analysis,  and to the forecasting literature, by reframing error analysis around the question of \emph{when} extreme errors are likely to occur, rather than the traditional focus on error magnitude, %methods of where or by how much, 
+thereby opening new avenues for anticipatory decision support in forecasting systems. Finally, by addressing the absence of a fair comparison benchmark, this paper positions the outputs of TreeAlert as a foundational reference point for future research.
+
+\section{Uncovering the principles of predicting extreme errors}
+
+\subsection{Errors in the Forecasting and Machine Learning Literature}
+
+Our work is akin to the field of error analysis in machine learning but with key distinctions that extends the logic of error analysis to the needs of time series forecasts. Error analysis is the process of systematically examining and interpreting the errors made by a model to gain insights into its behavior, identify areas for improvement, and enhance its performance and generalization capabilities \citep{cakmak2024}. However, our work differs from traditional error analysis approaches in several ways. Extreme errors are traditionally treated as isolated anomalies, defined by a binary outcome (anomaly/not-anomaly), and modeled using classification models, typically in cross-sectional data. Conversely, we target extreme errors that emerge from temporal and contextual patterns using time series data and result in a numeric outcome. Additionally, error analysis is often used retrospectively for identifying the sources and drivers of model error \citep{cakmak2024}. In contrast, our approach opens a new path in the field of error analysis by further identifying and predicting when and under what context forecasts are likely to be unreliable. 
+
+Our work also introduces explainability to errors analysis in time series forecasts. Prior literature has typically focused on quantifying the magnitude of errors, detecting outliers or classifying anomalous patterns \citep{chen2008, kim2020}, and developing early warning systems for imminent events \citep[e.g.,][]{shmueli2010}. For example, many studies use prediction intervals and prediction error distributions, as these methods convey uncertainty around forecast magnitudes \citep{aguirre2018, salem2020}. This study advances prior research by introducing combinations of temporal and contextual patterns under which extreme failures emerge, offering a new perspective on evaluating and predicting extreme failure patterns.
+
+\subsection{Contrasting Forecasting Patterns of Extreme Model Failures with Anomaly Detection and Early Event Detection}\label{sec-contrasting}
+
+Two fields that relate, but differ from our pattern-driven approach are \emph{anomaly detection} and \emph{early event detection}. In anomaly detection, the goal is to identify anomalous observations, or events, that diverge from the ``normal behavior" \citep{chandola2009, nassif2021}. ``Anomaly'' typically refers to a one-time event rather than a pattern. This retrospective identification of anomalous observations is useful for taking actions based on past behaviors, such as identifying abnormal account activity to sound an alarm \citep{patcha2007}, or identifying abnormal natural gas usage to detect a possible main break \citep{akouemo2016}.
+
+Early event detection shares similarities with anomaly detection, as both involve identifying regions in a time series where observed values deviate significantly from expected or predicted patterns \citep{wang2021}. A key distinction is that early warning systems emphasize real-time monitoring for sudden changes in fields such as communication, for detecting malicious attacks and intrusions, or in medicine, for detecting epidemics and diagnosing diseases \citep{deljac2015, shmueli2010}. Our approach differs from these methods in several key aspects. Table \ref{tab:contrast} summarizes these differences. First, we note that both early warning and anomaly detection research has little focus on the \emph{timing} of extreme errors. Since isolated anomalies seldom reveal attributes that lead to future failures, preemptive intervention requires more than what conventional anomaly detection offers. Furthermore, our work diverges from event-driven approaches like anomaly detection by being \emph{prospective} and focusing on \emph{patterns} of failures. We define a \emph{pattern} in this circumstance as \emph{a configuration of temporal and/or contextual variables that repeatedly predicts extreme errors}. 
+
+Temporal predictors capture time-based attributes (e.g., day of the week, hour of the day), while contextual predictors encapsulate exogenous factors such as special events, promotions, or weather forecasts. For instance, a pattern may manifest as ``Wednesdays at 8:00 PM during a promotional event". We aim to detect failure patterns to forecast the timings of future failures. In contrast to early event detection, we  to anticipate and analyze patterns of a forecasting model’s extreme errors during specific conditions, rather than merely detect one-offs, with the goal of improving model performance and decision-making. Thus, an important principle for techniques seeking to predict extreme errors is to focus on patterns rather than individual anomalous events. This leads to our first principle for designing methods that predict patterns of extreme forecasting failures:
+
+\renewcommand{\arraystretch}{1.3}
+
+\begin{table}[t]
+\centering%% 
+\caption{\centering Forecasting patterns of extreme model failures contrasted with anomaly detection and early event detection: contrasting goal, temporal focus, and pattern of interest}
+\label{tab:contrast}
+\begin{threeparttable}
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{>{\centering\arraybackslash}m{1.8cm}%
+                >{\centering\arraybackslash}m{4.1cm}%
+                >{\centering\arraybackslash}m{3.9cm}%
+                >{\centering\arraybackslash}m{3.7cm}}
+\toprule
+& \textbf{Anomaly / Outlier Detection} & \textbf{Early Detection of Events / Early Warning Systems} & \textbf{Forecasting Patterns of Extreme Model Failures} \\
+\midrule
+\textbf{Goal} &
+\textit{Classify} a single (or pattern) of values that deviate significantly from the norm \citep{chen2008, kim2020} &
+\textit{Detect} an environmental change through collection and monitoring of a series e.g. \cite{shmueli2010} &
+\textit{Predict the timing and context of extreme forecast errors} based on preexisting \textit{patterns} \\
+\hline
+\textbf{Temporal Focus} &
+\textit{Retrospective}: Identify deviations or anomalies after they occur &
+\textit{Real-Time}: Identify emerging patterns that signal the event &
+\textit{Prospective}: Predict future failure conditions \\
+\hline
+\textbf{Pattern of Interest} &
+\textit{Individual or a pattern of events} including rare spikes or anomalies (e.g., sudden hospitalization surges) caused by unforeseen events &
+\textit{Change in the entire series} due to environmental disruption (e.g., pandemics) &
+\textit{Patterns} of recurring conditions leading to extreme forecast errors (e.g., over-forecast every Sunday morning) \\
+\hline
+\textbf{Scope of Analysis} &
+\textit{Series'} anomalies are classified based on deviations &
+\textit{Series'} environment is monitored for changes &
+\textit{Forecast errors} are analyzed to uncover patterns \\
+\bottomrule
+\end{tabular}}
+%% Use \caption command for table caption and label.
+\end{threeparttable}
+\end{table}
+
+\begin{principle}
+\textit{Methods for predicting extreme forecasting failures should focus on patterns.}
+\end{principle}
+
+We can showcase the implications of shifting from an event-driven to a pattern-driven approach by considering a hospital admissions context. In anomaly detection, we might be interested in identifying past days with unusually high patient arrivals that provide insights into rare or extreme occurrences. In early event detection we might analyze emerging patterns of unusually high patient arrivals to detect an emerging epidemic. In contrast, our focus would be on identifying when a forecasting model of daily patient counts will likely fail in the future. By predicting future periods of extreme failure, we can alert hospital managers who can adjust their expectations of the forecast accuracy on those periods to help mitigate costs of extreme under- or over-forecasts. This example illustrates the importance of generating not just accurate forecasts, but actionable failure conditions. Accordingly, a second principle for predicting patterns of extreme model failures is \emph{actionability}. This enables proactive intervention before high-risk periods unfold.
+
+\begin{principle}
+\textit{Predictions of extreme forecasting failures should be stated in actionable form.}
+\end{principle}
+
+\subsection{Why Patterns of Extreme Forecast Failures Arise: Five Scenarios}
+
+Designing a method aimed at predicting extreme model failures must begin with a careful investigation of the conditions under which these failures occur. Identifying why these patterns arise ensures that our method’s design targets generalizable structures rather than specific anomalies.
+
+An extreme forecasting failure at time $t$ is an extreme difference between forecast $F_t$ and the actual value $y_t$, represented as $|y_t - F_t| > \theta$, where $\theta$ is a predetermined threshold that is critical to a given domain. A negative extreme failure occurs when the model over-forecasts the series ($y_t - F_t < \theta_1 < 0$), and a positive extreme failure occurs when the model under-forecasts the series ($y_t - F_t > \theta_2 > 0$), where $\theta_1$ is the threshold for negative extreme failures and $\theta_2$ is the threshold for positive extreme failures.
+
+While extreme failures frequently manifest during a series’ peaks or dips \citep{marvin2022} they are not restricted to these instances. Such failures can also emerge during routine periods, often driven by factors such as sparse data or slow-to-adjust models. Each factor carries distinct implications and costs, which we further elaborate in this section by examining five scenarios that commonly exhibit patterns of extreme forecasting failures.
+
+% \textit{Scenario (a): Series with steep peaks and/or dips}
+\begin{scenario}{Scenario (a): Series with steep peaks and/or dips}
+In practice, many time series have extreme seasonal peaks or dips, such as in urban rail passenger flow, electricity demand, and ozone concentration levels  \citep{li2024, amaraouali2023, marvin2022}. Forecasting models often struggle during the series' peaks or dips, leading to extreme errors. These extreme errors come about for reasons such as high model bias that prevents capturing the underlying patterns \citep{lin2023}, or when smoothing or aggregation with neighboring periods captures seasonal patterns but fails to capture the magnitude during these periods. Figure~1(a) depicts a segment of hourly bike usage along with forecasts and forecast errors, taken from a winning model in a city bike-sharing forecasting competition \citep{mohit2020}. This model was selected for its superior performance metrics, yet, we can observe that it consistently struggles to capture the pattern of steep peaks, resulting in extreme positive errors.
+\end{scenario}
+
+% \textit{
+\begin{scenario}{Scenario (b): Complex seasonal patterns}
+
+Time series often exhibit complex seasonal patterns \citep{zhao2024}, such as multiple seasonal cycles, high-frequency seasonality, non-integer seasonality, and dual-calendar effects. For instance, De Livera et al. \cite{delivera2011} describe a series with two annual seasonal patterns: one based on the Gregorian calendar (365.25 days per year) and the other on the Hijri (Islamic) calendar (354.37 days per year). The Hijri calendar is based on lunar cycles and is on average 10.88 days shorter than the Gregorian calendar. Such dual-seasonal behavior complicates modeling recurring events, such as holidays, when steep peaks or dips in one calendar do not align with those in another unsynchronized calendar. This case could result in extreme errors during non-peak or non-dip periods in the series. % due to misaligned seasonal patterns from the model. 
+Figure~1(b) illustrates how a misaligned holiday at times $t_1$ and $t_2$ can lead to recurring extreme errors during these periods.
+\end{scenario}
+
+\begin{figure}[!htb]
+\centering
+\caption{Five scenarios of extreme forecasting error failure patterns}
+\begin{tabular}{|l|l|}
+\hline
+\multicolumn{2}{|c|}{\includegraphics[width=0.47\linewidth, trim={0pt 5pt 0pt 5pt}, clip]{Figures/label.png}} \\
+\hline
+\multicolumn{2}{|c|}{
+    \begin{tabular}[c]{@{}c@{}}
+        (a) Steep Peaks and Dips\\
+        \includegraphics[width=0.82\linewidth]{Figures/1a.png}
+    \end{tabular}
+} \\
+\hline
+\begin{tabular}[c]{@{}c@{}}
+    (b) Complex Seasonal Pattern\\
+    \includegraphics[width=0.47\linewidth, trim={10pt 80pt 80pt 0pt}, clip]{Figures/1b.png}
+\end{tabular}
+&
+\begin{tabular}[c]{@{}c@{}}
+    (c) Overfit to Spurious Signals or Outliers\\
+    \includegraphics[width=0.47\linewidth, trim={20pt 80pt 20pt 0pt}, clip]{Figures/1c.png}
+\end{tabular} \\
+\hline
+\begin{tabular}[c]{@{}c@{}}
+    (d) Sparse Data\\
+    \includegraphics[width=0.47\linewidth, trim={10pt 130pt 20pt 0pt}, clip]{Figures/1d.png}
+\end{tabular}
+&
+\begin{tabular}[c]{@{}c@{}}
+    (e) Slow-to-Adjust Models\\
+    \includegraphics[width=0.47\linewidth, trim={10pt 130pt 20pt 0pt}, clip]{Figures/1e.png}
+\end{tabular} \\
+\hline
+\end{tabular}
+\label{fig:error_scenarios}
+\end{figure}
+
+\begin{scenario}{Scenario (c): Capturing spurious signals}
+
+Noise or outliers in the training data can mislead a forecasting model and hinder its ability to learn meaningful patterns \citep{cakmak2024}. In other words, the model might overfit an irrelevant pattern in the training data as shown in Figure~1(c). For example, early models used to forecast flu cases using Google Flu Trends overfit to irrelevant search terms like ``high school basketball,'' which coincided with flu season but were unrelated to flu cases. This led to erroneous over-forecasts of flu cases \citep{lazer2014}. Models that fit spurious signals can cause extreme errors in periods that lack peaks or dips in the series when the model incorrectly forecasts a peak or dip.
+\end{scenario}
+
+\begin{scenario}{Scenario (d): Sparse data}
+
+Series with many missing or zero values often lead to patterns of extreme forecast errors even in the absence of regular peaks or dips. This occurs in datasets capturing rare events, such as earthquakes or intermittent product demand. Prolonged zero-value periods can lead to over-forecasting during stable periods, while models biased toward zero demand can under-forecast when positive demand reappears \citep{wang2024b}. This would result in extreme errors during peak or dip periods. Intermittent demand can show regular patterns that are evident in real life such as in stock keeping units forecasting \citep{nikolopoulos2021, nikolopoulos2016} as well as irregular patterns \citep{kaya2020} such as demand for vehicle spare parts \citep{jiang2021}. Therefore, forecasting intermittent demand with regular or irregular patterns can lead to patterns of extreme errors as shown in Figure 1(d).
+\end{scenario}
+
+% \textit{
+\begin{scenario}{Scenario (e): Slow-to-adjust models}
+
+Patterns of extreme errors can occur when models fail to adjust after abnormal peaks or dips, producing a “ringing” effect. Such models continue forecasting elevated or reduced values even after conditions stabilize, resulting in large errors during stable periods. For example, a model that captures holiday sales peaks may keep predicting high demand once the holiday ends. As shown in Figure 1(e), these persistent deviations reflect the model’s inability to adjust to actual demand. Given these varied scenarios, effective failure prediction methods must capture a broad range of error patterns arising from complex seasonal patterns, sparse data, and slow model adjustment, etc.
+\end{scenario}
+
+\begin{principle}
+\textit{Methods for predicting extreme forecasting failures should accommodate a diverse range of error patterns.}
+\end{principle}
+
+%\subsection{Implications of Missed Extreme Forecasts Errors}
+
+\subsection{Implications of Missed Peaks and Dips}
+
+In demand forecasting, models that produce extreme failures during peaks and dips, such as in Scenario [a] or Scenario [b], can be especially damaging. These errors often have more severe consequences than those from models with similar overall error magnitudes spread evenly over time, even if those models perform worse on conventional accuracy metrics. In supply chain management, disbursed forecast errors allow firms to operate within existing buffers, minimizing demand signal distortion and reducing the likelihood of overreaction. These gradual deviations are more easily absorbed through  replenishment cycles and preserve operational stability. 
+
+In contrast, forecast failures concentrated during high-demand periods often overwhelm safety stocks enabling stockouts, service disruptions, and lost sales. These disruptions often also lead downstream planners to overorder, inflating replenishment requests to hedge against uncertainty \citep{bray2019}. This inflated demand propagates upstream, where it is frequently mistaken for a structural shift, leading to overordering, supply chain distortion, and amplification of the bullwhip effect \citep{croson2014, wu2006}. During upstream shortages, this dynamic escalates into inventory runs, as stores race to secure supply ahead of anticipated shortfalls \citep{bray2019}. 
+ 
+Persistent under-forecasting during peaks and over-forecasting during dips erodes managerial trust in forecasting systems. During demand surges, this lack of trust often results in over-ordering to compensate for perceived model deficiencies. During demand dips, it leads to inventory accumulation, increased holding costs, and potential obsolescence, further eroding confidence in the system. These implications suggest that extreme forecasting errors, particularly those involving missed peaks and dips, generate two distinct types of trust deficit: One between buyers and sellers, and another between managers and their forecasting systems. To mitigate these human consequences, an important principle is to produce interpretable insights explaining the potential for missed events, and not just model breakdowns or uninterpretable warning flags that could lead to further double-guessing by buyers, sellers, and managers.
+
+\begin{principle}
+\textit{Methods addressing extreme failures must produce human interpretable explanations of the conditions leading to model failure.}
+\end{principle}
+
+\subsection{Implications of Extreme Failure Patterns During Non-Peaks/Dips}
+
+As mentioned earlier, extreme forecast errors often coincide with peaks and dips in the series, while non-peak and non-dip periods are assumed to exhibit low variance and consistent behavior. Thus, extreme errors that manifest during these assumedly low variance periods are especially unexpected, and can significantly affect operations. In healthcare, overfitting to spurious correlations can create false demand spikes, prompting premature mobilization of staff, supplies, and vaccines, as described in Scenario [c]. Scenario [e] illustrates a similar problem through the “ringing effect,” where models remain slow to adjust after high-demand events. For example, \citet{Burkom2007} found that forecasting models of emergency room visits continued predicting elevated counts after holidays, leading to overstaffing and unnecessary costs. Likewise, \citet{lopez2014} reported that slow adjustment in pharmacy demand forecasts caused both overstocking and shortages.
+
+Scenario [d] highlights how sparse or intermittent data can trigger extreme over-forecasts during, low-demand periods. \citet{nikolopoulos2021} notes similar risks in other domains: in natural disasters, overestimating earthquake risk can lead to excessive regulation and financial reserves, while in financial markets, repeated over-forecasts of crashes may trigger costly defensive strategies.
+
+These examples highlight the need to predict extreme errors before they occur. Retrospective detection does not provide sufficient time for corrective action, making it essential for forecasting systems to identify failure patterns early enough to enable timely managerial response.
+
+\begin{principle}
+\textit{Methods for predicting forecasting failures should be prospective in nature.}
+\end{principle}
+
+\subsection{The Limitation of Conventional Performance Metrics}
+
+Forecasting modelers use metrics like MAPE and RMSE to benchmark forecast accuracy or define a loss function \citep{petropoulos2022}. However, these metrics aggregate errors across all periods and may obscure poor performance during extreme error periods. This limitation means that models optimized for overall accuracy may still perform poorly in such cases. Take metrics such as MAPE and RMSE, which compute error as:
+\begin{equation}
+\text{MAPE} = \frac{1}{T} \sum_{t=1}^{T} \left| \frac{y_t - F_t}{y_t} \right| \times 100,
+\qquad
+\text{RMSE} = \sqrt{\frac{1}{T} \sum_{t=1}^{T} (y_t - F_t)^2};
+\end{equation}
+were $T$ is the total number of observations in the training (or test) set. Since each error term $y_t - F_t$ contributes equally to the aggregate error metric, rare but extreme deviations 
+are diluted by the dominant presence of lower-magnitude errors. This bias favors models that minimize average error rather than those that capture high-impact, infrequent fluctuations, potentially leading to suboptimal model selection in scenarios where capturing periods of extreme error is critical.
+
+Figure \ref{fig:Monthly Sales} illustrates how extreme errors are diluted in a hypothetical example that presents artificial monthly sales data with seasonal patterns around the December holidays. Here, two models are used to forecast sales. The performance metrics of the two models are displayed in Table \ref{tab:metrics}. Model 1 appears better based on all metrics, indicating lower overall error. However, while this model closely fits to actual sales, it fails to capture the December surges. In contrast, Model 2 captures  December surges but exhibits inferior performance metrics compared to Model 1.
+This leads to the following principle of locality:
+
+\begin{principle}
+\textit{Methods for predicting patterns of forecasting failures should optimize local performance during extreme failures, rather than overall performance.}
+\end{principle}
+
+\begin{figure}[h]
+  \centering
+    \caption{Monthly sales (hypothetical data) with two forecasting models}
+    \label{fig:Monthly Sales}
+  \includegraphics[width=1\linewidth]{Figures/MonthlySales.png}
+\end{figure}
+
+\begin{table}[htbp]
+\centering
+\caption{Performance metrics for Model 1 and Model 2. All Model 1 metrics are lower (better)}
+\small
+\begin{tabularx}{\textwidth}{c
+                                  >{\centering\arraybackslash}X
+                                  >{\centering\arraybackslash}X
+                                  >{\centering\arraybackslash}X
+                                  >{\centering\arraybackslash}X
+                                  >{\centering\arraybackslash}X
+                                  >{\centering\arraybackslash}X}
+\toprule
+\textbf{} & \textbf{ME} & \textbf{RMSE} & \textbf{MAE} & \textbf{MPE} & \textbf{MAPE} & \textbf{MASE} \\
+\hline
+\textbf{Model 1} & 2850.04 & 14938.83 & 9069.2 & -0.614 & 2.4174 & 0.4203 \\
+%\hline
+\textbf{Model 2} & -6536.35 & 15694.96 & 14586.29 & 1.9647 & 4.1411 & 0.676 \\
+\bottomrule
+\end{tabularx}
+\label{tab:metrics}
+\end{table}
+
+\subsection{Guiding Design Principles for Pattern-Based Failure Prediction}
+
+Beyond generalizing across scenarios and sources of forecasting failure, we must also consider how to generalize failure prediction across modeling techniques and also ease the integration of any method with existing FSSs. A framework for predicting model failures must maintain methodological generalizability, ensuring applicability across diverse forecasting techniques regardless of their statistical assumptions, algorithmic architecture, or model complexity. Forecasting models span a wide methodological spectrum, ranging from classical statistical approaches such as exponential smoothing and ARIMA, to more complex machine learning architectures such as deep neural networks. Methods that depend on specific model structures, learning algorithms, or output formats risk incompatibility. Therefore, an effective framework must be robust to model-specific assumptions, agnostic to functional form, and adaptable to varying output representations. It must identify and characterize failures in a manner that is decoupled from the underlying forecast generation process. In recognition of this requirement, we advocate the following principle:
+
+\begin{principle}
+\textit{Methods should function reliably across forecasting methods without being undermined by model-specific properties.}
+\end{principle}
+
+In practice, forecasting outputs are embedded within support systems such as dashboards and automated planning workflows. Yet, many advanced analytical methods are difficult to integrate due to high computational demands, complex dependencies, or specialized infrastructure requirements. This is especially problematic in operational contexts that call for efficiency, real-time responsiveness, or deployment on constrained hardware. Methods that require extensive parameter tuning, data preprocessing, or iterative retraining may exceed these limits. All these considerations lead to our final principle:
+
+\begin{principle}
+\textit{The method should be easy to integrate into existing systems without imposing significant computational burdens.}
+\end{principle}
+
+\begin{table}[b]
+\centering
+\caption{\textit{Guiding Principles for Methods that Forecast Forecasting Failures.}}
+\small
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{|m{2.5cm}|m{12.5cm}|}
+\hline
+\centering\textbf{Principle 1:} \\ \centering\textit{Pattern-focus} & Methods for predicting extreme forecasting failure should focus on patterns \\
+\hline
+\centering\textbf{Principle 2:} \\ \centering\textit{Actionability} & Predicted failures should be stated in actionable form to enable proactive intervention before high-risk periods unfold \\
+\hline
+\centering\textbf{Principle 3:} \\ \centering\textit{Diverse Error Patterns} & Methods for predicting extreme forecasting failures should accommodate a diverse range of error patterns \\
+\hline
+\centering\textbf{Principle 4:} \\ \centering\textit{Transparency} & Methods addressing extreme failures should produce human interpretable explanations of the conditions leading to model failure \\
+\hline
+\centering\textbf{Principle 5:} \\ \centering\textit{Prospective} & Methods for predicting forecasting failures should be prospective in nature \\
+\hline
+\centering\textbf{Principle 6:} \\ \centering\textit{Local performance} & Methods for predicting patterns of forecasting failures should optimize local performance during extreme failures, rather than overall performance \\
+\hline
+\centering\textbf{Principle 7:} \\ \centering\textit{Model-agnostic} & Methods should function reliably across forecasting methods without being undermined by model-specific properties \\
+\hline
+\centering\textbf{Principle 8:} \\ \centering\textit{Operational Integrability} & The method should be easy to integrate into existing  systems without imposing significant computational burdens \\
+\hline
+\end{tabular}
+\label{tab:principles}
+\end{table}
+
+Table \ref{tab:principles} summarizes the eight principles we have uncovered in our search to create methods to foresee and interpret extreme forecasting failures. The first five principles consider the timing of forecasting failures, and the last two principles emphasize generalizability and operationalization. The principles of pattern-focus and diverse error patterns empower the method to detect systemic failure conditions while accommodating varied sources of error. Transparency and actionability respond to the need for interpretable outputs that allow for timely intervention. Model-agnosticism and operational integrability support robustness, adaptability, and scalability, ensuring that forecasting failure methods remain effective across varied algorithms, data characteristics, and system environments. Collectively, these design oriented principles address critical gaps in both the error analysis and forecasting literatures, and serve as the basis for creating targeted, interpretable, and anticipatory methods to learn from and preempt forecasting failures.
+
+\section{Tree Alert: A method for predicting patterns of extreme forecasting failures}
+
+Based on the eight principles above, we developed TreeAlert, a novel method designed to identify patterns of extreme forecasting errors and predict the timing and context of future extreme failures. Our proposed approach combines machine learning, statistical techniques, and visualization to support human decision-making by extracting and presenting interpretable rules and visual insights. We name our method TreeAlert, as it relies primarily on extracting rules from a regression tree. Figure \ref{fig:TreeAlertSteps} illustrates the seven methodological steps comprising the TreeAlert method. The input to our method is a series of forecast errors and their associated timestamps. The forecast errors are the difference between the actual time series values and their forecasts, where forecasts can be generated using any forecasting algorithm. Each step is articulated in the following subsections.
+
+\begin{figure}[htbp]
+  \centering
+  \small
+    \caption{Diagram of TreeAlert’s methodological process}
+  \includegraphics[width=.95\textwidth]{Figures/Tree_alert_chart.png}
+  \label{fig:TreeAlertSteps}
+\end{figure}
+
+\subsection{Step 1 - Feature Extraction}
+
+TreeAlert is parsimonious as its operation requires only the error series and its associated timestamps, though additional contextual data can be incorporated to enhance analysis. The first step extracts temporal variables (“predictors”) from the timestamps, thereby creating variables such as the month of the year, day of the week, hour of the day, and holiday/non-holiday. This choice is not trivial. The level and number of created predictors is determined by the length and granularity of the test set (see Step 2) so that we have at least two cycles (and ideally more than two) for each relevant predictor. For example, “month of the year” requires at least two years of monthly (or more granular) data, and “hour of day” requires at least two days of hourly (or more granular) data.
+
+\subsection{Step 2 - Data Partitioning}
+
+Before training the tree model, the forecast error series is divided into training and test subseries. The earlier subseries ($y_1, \ldots, y_T$) can serve as the training set, and the subsequent subseries ($y_{T+1}, y_{T+2}, \ldots$) as the test set \citep{shmueli2024}. The training set is used for training and tuning TreeAlert, and the test set is used for evaluating TreeAlert's predictive performance.
+
+Both training and test periods should be sufficiently long to support training and evaluation. %A sufficient training subseries allows TreeAlert to capture more diverse error conditions. 
+A longer training subseries $y_1, \ldots, y_T$ allows TreeAlert to capture more diverse error conditions. % A long test series increases the likelihood that conditions learned during training reappear when testing, thereby. 
+The length of the test subseries is crucial for properly evaluating TreeAlert's performance---the test set length affects %increases 
+the likelihood that conditions learned during training reappear when testing. For instance, if a rule learned during training, such as ``extreme over-forecast likely on April 1,'' does not encounter an ``April 1'' in the test set, it will not trigger an alert. This lack of alerted test periods makes it impossible to assess the rule's performance during the test period, thereby impeding the evaluation of the rule’s generalizability.
+\subsection{Step 3 - Regression Tree}
+
+\subsubsection{Why TreeAlert Uses a Regression Tree.}
+
+Regression trees were selected for their balance of interpretability, efficiency, and predictive capability. They automatically identify informative predictor combinations and group similar observations, supporting \emph{Principle 6: Local Performance}. Second, and most critically, regression trees produce transparent rule-based outputs that clearly outline the conditions under which forecasting errors occur. These rules enable TreeAlert to predict extreme failure patterns while offering actionable insights into the model's limitations and behavior that decision-makers can easily understand. This is in contrast to black box models that do not provide an insight into the nature of the interactions between predictive features \citep{lai2009} and are often incompatible with situations where information outside the data needs to be combined with a risk assessment \citep{rudin2019}. This limitation stands in contrast to the goals of `\textit{Principle 1: Trust and Transparency}' due to their lack of interpretable explanations.
+
+While neural networks have demonstrated state-of-the-art performance in time series anomaly detection (e.g. \cite{wang2024a}) many are not put into practice due to their inability to explain their reasoning \citep{houssainy2021}.Post-hoc tools such as SHAP and LIME only approximate model reasoning and may not represent true internal behavior \citep{rudin2019} and do not result in predictor combinations of grouped observations. For these reasons, tree-based models are commonly integrated into embedded systems and IoT devices \citep{silva2022} while maintaining high levels of forecast accuracy and stability \citep{houssainy2021}.
+
+Third, regression tree offers an energy-efficient alternative to neural networks which require more parameter optimization and data for training and preprocessing and normalization \citep{reina2023, silva2022, spiliotis2022}. The reduced energy consumption and computational efficiency of tree-based models aligns with \textit{Principle 7: Operational Integrability}.
+
+Classification methods were excluded due their inherent limitations in handling forecast errors. Specifically, these models require a categorical output variable (“label”) to represent extreme forecasting errors. Continuous errors would require transformation into categorical labels such as “extreme” vs. “non-extreme” (or “extreme over-forecast”, “extreme under-forecast”, and “non-extreme” to maintain directionality). Such dichotomization leads to information loss by discarding the error magnitudes. In contrast, TreeAlert uses the information contained in the severity of each failure for building the tree (Step 3.2.2), as well as for computing numerical error magnitude statistics in each terminal node (Step 3.3) that are used to select the top rules leading to the most extreme errors. TreeAlert therefore provides an interpretable, computationally efficient, and operationally integrable method for capturing error patterns using a single forecast error series.
+
+\subsubsection{Feature Selection.}
+Choosing too many predictors and/or predictors with high cardinality (e.g., day of month, minute of hour) can lead to overfitting the training period. Such overfitting can lead to rules that focus on overly localized patterns in the training period instead of on patterns that generalize to future periods. 
+
+In combination with temporal predictors, TreeAlert can also incorporate contextual predictors. These exogenous features are particularly valuable for identifying and predicting error patterns that arise from interactions between the forecasting model and environmental conditions. For example, the contextual predictor ‘sales promotion’ may capture errors that result from peaks and dips. `Lunar New Year' may capture error patterns from complex lunar seasonal patterns. Contextual predictors must be known (or forecastable) at the time the failure prediction is made to ensure they are valid inputs in prospective applications. A contextual predictor that is highly correlated with temporal variables (e.g., `outdoor temperature' and `time of day') or with another contextual predictor (e.g., `number of walked steps' and `exercise intensity') might be redundant. The regression tree will select the most informative predictor and its values to split on.
+
+One might be tempted to include the original series’ magnitude as another predictor to capture rare, high-impact errors, especially during peak or dip periods. While this is useful for retrospective analysis, future magnitudes are unknown at prediction time and thus unsuitable as predictors. One possible alternative is substituting lagged versions of the series’ values as proxy features. Lagged variables preserve recent magnitude information without violating temporal constraints and enable the model to leverage the data’s autoregressive structure to infer future error-prone conditions. In summary, the original series cannot be directly as a predictor, but lagged variables offer a viable, forecast-compatible alternative to using actual future magnitudes, provided their use can accommodate the required forecast horizon and additional data storage requirements.
+
+\subsubsection{Implementation and Tuning.}
+We apply a regression tree to the training series of forecast errors (the output variable) as a function of the temporal and (optionally) contextual predictors. This special output variable highlights our focus on error analysis, in contrast to standard forecasting models that are applied to the original series. The resulting tree structure consists of terminal nodes where forecast errors of similar magnitude and sign are grouped together based on the values of the temporal and contextual predictors. 
+
+Once the tree is constructed, TreeAlert departs from conventional regression tree use. Each terminal node represents a distinct combination of temporal and contextual predictors linked to a specific group of forecast errors. The resulting tree may contain numerous terminal nodes. However, unlike standard regression tree applications that display the entire tree for prediction purposes, TreeAlert’s branches only lead to terminal nodes that exhibit extreme negative or positive errors (see Section~\ref{sec:rule-extraction} for details). In Step 3, our attention is directed solely toward these terminal nodes and their tree paths.
+
+Model tuning is done with a focus on obtaining useful extreme terminal nodes. Key hyperparameters include the minimal terminal node size ($n$) and the cost complexity parameter ($cp$). Together, they balance under-detection (underfitting) and false detection (overfitting). Minimal terminal node size ($n$) controls the granularity of the tree’s partitioning. A small $n$ allows for the identification of nuanced behaviors resulting from temporal and contextual combinations that lead to (possibly few) large errors. A low $cp$ value facilitates more splits in the regression tree, resulting in a more complex model. This complexity can lead to an adequate fit, enabling the model to capture intricate patterns of error. When dealing with shorter time series or fewer patterns of extreme errors, a small $n$ and a value of $cp$ close to zero will more effectively capture the limited number of patterns.
+
+\subsection{Step 4 - Rule Extraction and Filtering}
+\label{sec:rule-extraction}
+
+Each terminal node in the tree is associated with a tree path that determines its rule. We can present these rules as an unstructured table of rules, one for each node (see two examples in Section \ref{sec-demo}). A rule consists of the combination of temporal (and possibly contextual) predictor values that lead to that terminal node, along with the mean error in that node. An example of a rule might be: 
+\begin{center}
+\textit{``Mean error = 35.85 when Hour is 5 or 16 \& DayofWeek is 1 or 2''}
+\end{center}
+
+To isolate extreme errors, we adapted a vertical pruning technique by \cite{danks2024composite} that fundamentally differs from traditional pruning approaches. Rather than removing splits to minimize overall prediction error, this approach selectively retains only the terminal nodes with the highest error magnitudes. The result is a ``hollowed" tree structure, where the central portion that contains nodes with smaller errors is removed, while the outer branches that lead to extreme errors are preserved. An example is shown in Figure \ref{fig:tree}. Unlike traditional post-pruning methods that focus on minimizing overall prediction error across all terminal nodes, this method directly filters the terminal nodes based on their individual error magnitudes to focus the model’s attention on the outer branches where high-magnitude errors are concentrated.
+
+\begin{figure}[htbp]
+\centering
+\caption{\centering``Hollowed" out regression tree of forecast errors. The shaded region is trimmed to isolate the outer branches (non-shaded) corresponding to the most extreme over- and under-forecasting patterns}
+\includegraphics[width=1\textwidth]{Figures/Hollow Tree.png}
+\label{fig:tree}
+\end{figure}
+
+The hollowed tree is operationalized in TreeAlert by 
+retaining only branches leading to terminal nodes with the top-$k$ largest absolute mean errors, where $k$ is a quantity selected by the user.\footnote{If positive and negative errors have different costs, or domain expertise necessitates, we can retain the top $k_1$ negative and top $k_2$ positive mean errors, where $k_1+k_2 = k$.} This results in $k$ rules. Retaining only $k$ terminal nodes and their associated rules ensures interpretability by avoiding the complexity of large regression trees that result from high-dimensional features or high-cardinality categorical predictors. Each of the remaining top-$k$ terminal nodes contains $n$ or more forecast errors, where $n$ is the minimal terminal node size tuning parameter. These terminal nodes will be used as rules for future alerts. 
+
+A terminal node may include both extreme and non-extreme errors. The threshold~$\theta$ for classifying an error as extreme (or a set of thresholds $\theta_1$ and $\theta_2$ for positive and negative errors, respectively) is best determined using domain knowledge (e.g., costs), or in the absence of such information, on statistical logic. For example, to determine~$\theta$ we can define extreme errors as those exceeding certain percentiles such as the 5th percentile (P5) and 95th percentile (P95) of the error distribution. Errors below P5 or above P95 are classified as `extreme’ while others are deemed `non-extreme’. 
+
+For each rule we can estimate its level of uncertainty by considering the errors contained in the corresponding terminal node. The ratio of extreme and non-extreme errors in a terminal node yields an estimated marginal probability of a future error being extreme while using that rule. This probability is shown in the ``Test Precision" column in Table \ref{tab:Electricity_Table}. We can then supplement our rules with probabilistic statements such as \textit{``an extreme under-forecast is expected on Mondays at 5pm, with probability 0.9."}
+
+\subsection{Step 5 - Rule Visualization}
+
+Figure \ref{fig:VizDemo} shows an example of how TreeAlert visualizes failures. We overlay the top-$k$ most extreme error rules on a time plot (line chart) of the actual and fitted (forecasted) series, as well as on the time plot of the errors series. The top plot displays three weeks of Luxembourg’s electricity demand with forecasts, and the bottom plot displays the forecast error series. The errors flagged by the $k$ rules are highlighted on both charts as circles (we set $k$=2 in this example for simplicity). These include both extreme errors (true alerts, marked as ‘o’) and non-extreme errors (false alerts, marked as ‘•’). We can also use different colors to distinguish the different rules. Each marked error in the error plot (bottom panel) directly corresponds to a marked value in the actual series (top panel) during the same time period. The absence of flagged errors for a particular peak or dip in the error plot may be due to one or more of the following: the errors observed during these periods may not be associated with a recurring pattern, the corresponding failure condition may include many non-extreme errors that lower the terminal node’s mean error, or a relevant temporal or contextual predictor needed to capture the underlying failure pattern may be missing.
+
+The charts can also be enhanced by interactive visualization to allow zooming into particular periods, filtering to certain rules, as well as presenting the timestamp and text-based rule when hovering over a specific period. This enables decision-makers to observe the algorithm’s performance during failure periods, including when and to what extent the model under performs. 
+
+\begin{figure}[!htb]
+  \centering
+  \caption{\centering TreeAlert highlights extreme failure patterns of an electricity demand model for Luxembourg. Each rule's mean error  can be negative (patterns of over-forecasts), or positive (patterns under-forecasts)}
+    \includegraphics[width=.9\linewidth, trim=0pt 50pt 0pt 0pt, clip]{Figures/VizDemo.png}
+  \label{fig:VizDemo}
+\end{figure}
+
+\subsection{Step 6 - Interpretation}
+
+We developed a custom interpretation module to refine the rules extracted from Section \ref{sec:rule-extraction} as well as to overcome challenges of standard rule extraction functions (such as the rpart.rules function in the rpart package for the R computing environment). Specifically, our module adapts to the dataset’s encoding (e.g., mapping numeric values to weekdays, grouping consecutive discrete times into intervals) and translates record-level logic into algorithm-level behavior (e.g., determining when to replace “or” with “and”). 
+
+The rules extracted from a regression tree can suffer from three challenges: First, they can create overlapping rules (because they list only inclusion conditions and not exclusion conditions of the splits). For example, we might get two rules:
+
+\begin{itemize}
+    \item[(R1)] \textit{``Mean error = 33.4 when hour is 5 or 16 and DayofWeek is Sun or Mon or Tues''}
+    \item[(R2)] \textit{``Mean error = 16.2 when hour is 5 or 16 and DayofWeek is Sun or Mon''}
+\end{itemize}
+
+Examining the tree directly reveals that R1 includes the path \textit{``DayofWeek is NOT Sun or Mon''}. Yet, such exclusions are not maintained by rpart's rule extraction algorithm. Our algorithm uses the training data itself to disambiguate the rules, thereby changing the DayofWeek part in R1 into \textit{``DayofWeek is Tues''}. The resulting rules are then non-overlapping.
+
+Second, a rule can be confusing for human comprehension due to its phrasing and focus on record-level behavior rather than the algorithm’s global behavior. For example, consider again R2. This means that a failure falls into this terminal node if its timestamp is 5:00 OR 16:00 on Sunday OR Monday. However, this does not tell us when the forecasting algorithm fails. In this case, we would say the algorithm is predicted to fail at 5:00 AND 16:00 on Sundays AND Mondays. 
+
+Third, predictor values may be misleading to decision makers who lack knowledge of the data’s structure. For instance, if the data are collected in 10-minute intervals, rules that reference  \textit{``Minute is 10 and 20”} should not be interpreted as failures occurring every 10 minutes. Instead, they reflect model failures across the 10–29 minute interval. TreeAlert’s custom interpretation module addresses all these three issues, providing user-understandable rules that lack these pitfalls.
+
+As an alternative to developing this module, we also explored using a large language model to rephrase extracted rules. However, this approach produced inconsistent outputs, raising concerns about reliability as well as its interpretability in decision-making contexts. We therefore opted for a deterministic rule-based algorithm that ensures consistency and transparency in rule interpretation. Section \ref{sec-demo} illustrates the use of this algorithm on two empirical datasets.
+
+\subsection{Step 7 - Failure Prediction and Performance Evaluation}
+
+TreeAlert applies the learned decision rules to an unseen test set. Specifically, it iterates over each future timestamp, checking its correspondence with the $k$ rules learned from the training data. If a future timestamp satisfies the conditions of any rule associated with extreme errors, it is flagged.
+
+Evaluating TreeAlert’s ability to predict future extreme errors is crucial because forecast error behavior may differ between training and test sets. If this occurs, rules derived from the training data may fail to identify future extremes, producing false alerts. This may also result from suboptimal tuning of TreeAlert’s parameters or when the training data does not span sufficient periods to identify error patterns. Employing a split-sample training-test approach in Step 2 enables evaluating the model’s robustness by detecting critical failures on the out-of-sample test dataset. This ensures that TreeAlert avoids overfitting the training period and can provide insights for adjustments of the tree tuning parameters and the filtering of rules. 
+
+We chose to focus our empirical performance evaluation on precision (positive predictive value, PPV), which measures the percentage of correctly identified pattern-based extreme errors among all periods flagged by TreeAlert. This focus means our objective is not to capture every extreme failure but to measure the performance of rules when predicting patterns of extreme error. By prioritizing precision, we ensure that when the system flags a period, it is highly likely to be a genuine and significant failure caused by a recognized pattern. Our evaluation is therefore limited to the periods that our rules have already flagged. While other metrics like recall and F1-score are valuable for assessing a model's ability to capture \emph{all} failures, they are less relevant here as they would penalize the performance metric for missing non-pattern-based (non-actionable) anomalous failures. This fall outside our intended application. Based on the resulting precision and the visualization of error distributions, we may consider further tuning TreeAlert's hyperparameters.
+
+We bemoan the lack of a fair comparison benchmark, as existing models do not predict the timing of extreme model failures. In response, we offer the outputs of TreeAlert as a foundational benchmark for this emerging area of research and welcome the development of alternative solutions %may be developed 
+that compete on detection performance or interpretability. For such methods to serve as valid comparators, they should adhere to the principles in our framework to be equally valid.
+
+\section{Demonstrations of TreeAlert }\label{sec-demo}
+
+TreeAlert offers actionable insights into critical applications where extreme forecasting failures can have serious implications. In this section, we present two applications drawn from distinct domains: electricity demand forecasting and personal health monitoring. Each application demonstrates TreeAlert’s ability to evaluate a model’s forecasts by uncovering patterns characterized by recurring contextual conditions associated with extreme failures. Then, TreeAlert applies the learnt patterns to predict future risky periods.
+
+\subsection{Demonstration 1: Forecasting Electricity Demand}
+
+Electricity demand forecasting is critical for grid stability and operational efficiency. Missed forecasts of demand peaks can cause grid stress, price volatility, outages and affect distribution networks \citep{ciarreta2023, gilbert2023, steinbuks2019}. In this application, we use TreeAlert to identify recurring patterns of extreme forecasting errors and predict future failures using electricity demand data from European power systems. Specifically, we analyze four months of 15-minute actual and forecast electricity load data for the Germany-Luxembourg bidding zone \citep{entsoe2025}. We then apply these rules to a future test set to evaluate TreeAlert's predictive performance.
+
+\subsubsection*{Step 1 - Feature Extraction:}
+Derived from the timestamps, we create three temporal predictors: minute-of-hour, hour-of-day, and day-of-week.
+
+\subsubsection*{Step 2 - Data Partitioning:}
+The series is partitioned using a 75/25 split, where the first 3 months of the data serve as the training set, and the last month is reserved as the test set. This is visualized in Figure \ref{fig:electricity} where the train/test partition is displayed by a red dashed line.
+
+\subsubsection*{Step 3 - Regression Tree:}
+We train a regression tree on the forecast errors as a function of the three temporal predictors. Because the series has many periods (2,120 15-min buckets) and many patterns of extreme errors, we set $n = 5$ and $cp = 0$. We can increase these values if we wish to identify additional patterns of errors per rule at the risk of flagging more non-extreme periods.
+
+\begin{table}[b]
+  \centering
+  \caption{Top 4 extreme terminal node rules, with their training RMSE and precision}
+  \includegraphics[width=1\textwidth]{Tables/Electricity_Table.png}
+  \label{tab:Electricity_Table}
+\end{table}
+
+\subsubsection*{Step 4 - Rule Extraction and Filtering:}
+\label{sec:rule_filtering}
+We define extreme errors as those beyond the 5th and 95th percentiles of the training error distribution and extract the top four rules (Table \ref{tab:Electricity_Table}). In this case, all associated terminal nodes have a positive mean error, indicating that the forecasting model tends to under-forecast electricity demand. The training RMSE values vary across the rules, reflecting variations in in-sample forecasting accuracy under different conditions. While some conditions yield high errors, such as RMSE = 4869 in rule 1, the model's overall RMSE is 2517. This disparity highlights that th model’s overall RMSE may obscure weaker performance during a small number of periods with extreme errors (as discussed in Section \ref{sec-contrasting}).
+
+\subsubsection*{Step 5 - Rule Visualization:}
+TreeAlert visualizes extreme errors through paired time plots (Figure \ref{fig:electricity}), enabling decision-makers to identify when and how severely the algorithm fails. The top panel shows the electricity demand series and the series of forecasts. The bottom panel shows the forecast errors series. The red dashed line separates the training and test periods. We see that many of the rule patterns map to peaks in electricity demand. Most flagged instances align with demand peaks, indicating patterns of model failures during seasonal high demand periods. The four rules identify multiple extreme errors (`o’), but in some instances, non-extreme errors (`•'). We may fine-tune the model’s hyperparameters, temporal variables, and quantity of rules to more effectively target extreme cases.
+
+\begin{figure}[t]
+\centering
+\caption{\centering Electricity demand, forecasts, and forecast errors series, with flagged periods using TreeAlert}
+\includegraphics[width=.9\textwidth]{Figures/Electricity.png}
+\label{fig:electricity}
+\end{figure}
+ 
+We note that patterns of extreme failure due to dips in the error series (over-forecasts) are not flagged in this case because their terminal nodes did not yield a sufficiently high mean error to rank among the top-$k$ rules. However, if we are interested in also flagging common patterns of over-forecasted periods, we can %Users may instead 
+adjust Step~4 (Rule Extraction and Filtering) to retain the top $k_1$ negative and $k_2$ positive mean error rules; see an illustrated example in Appendix. 
+
+\subsubsection*{Step 6 - Interpretation:}
+Each resulting rule is translated using the interpretation module, with the outputs shown in Table \ref{tab:Electricity_Table}. The translated rules indicate under-forecasting of electricity demand during early evening hours, especially from Sunday to midweek. The alignment of these rule failures with the peaks in Figure \ref{fig:electricity} suggests that the errors stem from increased electricity demand during these periods. These insights help decision makers identify times when forecasts are less reliable and guide algorithm designers in improving model performance under such conditions.
+
+\subsubsection*{Step 7 - Evaluating Predictive Performance}
+Table \ref{tab:Electricity_Table} shows the precision of each terminal node as well as the overall precision of TreeAlert if using all four rules. Recall that TreeAlert aims at capturing patterns of extreme errors, not single events. In the training period, it flagged 36 of the 3,349 periods and in the test period it flagged 6 of the 384 periods as extreme errors. TreeAlert consistently identified extreme errors (that arise from patterns) across both sets. This consistency highlights TreeAlert's robustness and generalizability. Each of the four rules contributed equally to precision. Deploying TreeAlert with these rules is expected to have a precision of 0.52, meaning that an alerted future period has a 52\% chance of having an extreme forecasting error.
+
+\subsection{Demonstration 2: Forecasting Heart Rate}
+
+Consider the now ubiquitous health-related smart devices and sensors that collect data on our behaviors, bodies, and environment. Extreme over- or under-forecasts can be dangerous in health monitoring. For example, an IoT device that algorithmically forecasts heart-rate over time exhibits routine fluctuations, but steep peaks and/or dips in heart rate can be indicative of critical health events, necessitating precise and reliable forecasts of these events. We demonstrate the use of TreeAlert to detect extreme failure patterns. Specifically, TreeAlert is applied to forecasts on data from an IoT-based heart rate monitoring device, which recorded heart rate measurements at 10-minute intervals over a two-month period (Furberg et al., 2016). 
+
+\subsubsection*{Step 1 - Feature Extraction:}
+We extract three temporal predictors: day-of-week, hour-of-day, and minute-of-hour. In this demonstration we also include two contextual predictors: intensity and steps. Intensity is an ordinal categorical variable measuring the intensity of activity of the device wearer on a scale of 1-3. Steps is the number of steps taken, recorded in each 10-minute interval.
+
+\subsubsection*{Step 2 - Data Partitioning:}
+We split the heart rate series into the first 3,240 10-min buckets (training) and final 572 buckets (test), yielding a 85/15 temporal train-test split.
+
+\subsubsection*{Step 3 - Regression Tree}
+The regression tree is trained on the forecast errors as a function of the three temporal predictors and two contextual predictors. We set $n = 9$ and $cp = 0$.
+
+\subsubsection*{Step 4 - Rule Extraction and Filtering:}
+We extract the top three rules as shown in Table \ref{tab:HeartRate_Table}. As in the electricity demand case, all associated terminal nodes have a positive mean error, indicating the forecasting model tends to under-forecast heart rate under those conditions. While some conditions yield high errors (such as RMSE = 40.73 in rule 1), the model's considerably lower overall RMSE of 9.36 means that the model becomes unreliable under the conditions captured by the rules.
+
+\begin{table}[b]
+  \centering
+    \caption{\centering Top three extreme terminal node rules, with their training RMSE and precision}
+    \includegraphics[width=1\textwidth]{Tables/HeartRate_Table.png}
+  \label{tab:HeartRate_Table}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\caption{\centering Heart rate, forecasts, and forecast errors series, with flagged failure periods using TreeAlert}
+\includegraphics[width=.9\textwidth]{Figures/hr_viz.png}
+\label{fig:hr_viz}
+\end{figure} 
+
+\subsubsection*{Step 6 - Interpretation:}
+Table 5 presents the translated rules from the interpretation module, revealing model failures during early weekday mornings and late afternoons. These  periods coincide with timings of increased physical activity as all three rules include Steps as a predictor. The Intensity predictor is excluded, likely due to its redundancy with the more granular Steps variable.
+
+\subsubsection*{Step 7 - Failure Prediction and Performance Evaluation:}
+The results are displayed in Table \ref{tab:HeartRate_Table} (right columns). TreeAlert’s rules flagged 55 of the 3,240 periods in the training set and 12 of the 572 periods in the test set as extreme errors. The test set precision demonstrates that TreeAlert’s rules and thresholds derived from the training data are generalizable to unseen data.
+
+\section{Discussion and Conclusion}
+
+TreeAlert is a general method for detecting extreme failure patterns in time series forecasting algorithms, which can then be used to predict the timing of future failures. By extending the machine learning area of error analysis to the domain of time series and forecasting models, TreeAlert introduced several novelties. First, in ordinary machine learning error analysis, one models the relationship between correct/incorrect classifications by the machine learning classifier as a function of the original variables (features) in the dataset (see, for example Microsoft’s Azure error analysis tool). In contrast, we model the relationship between a numerical forecast error and a set of specially-constructed temporal and contextual features. Second, our approach departs from conventional error modeling by targeting only the most extreme forecast errors, using a specialized pruning technique that isolates these errors. Third, TreeAlert moves beyond retrospective error diagnostics by generating interpretable decision rules that predict the timing, context and magnitude of future model failures. These differences lead to a novel method in error analysis. 
+
+ TreeAlert supports alternative regression tree algorithms, different lengths of series, encompassing different trends, patterns, and seasonal structures. By proactively identifying extreme failure patterns and predicting periods of extreme failures,  it is valuable for digital platforms, electronic markets, fintech, and other domains where acting on, or ignoring, extreme failures can have serious ramifications. TreeAlert is generalizable across statistical and machine learning software and  can be seamlessly integrated into automated forecasting systems, such as Meta’s Prophet, which are prone to extreme errors when assessing steep peaks and/or dips in a series. By introducing forward-looking risk assessment through error analysis, TreeAlert transforms FSSs into more transparent, actionable, and trustworthy decision-making tools.
+
+Three primary statistical challenges arise in the application of TreeAlert: (1) generalization of identified patterns, (2) the occurrence of false alerts, and (3) stable error distribution. First, as shown in Figures \ref{fig:electricity}, the tree may falsely flags non-extreme points. Balancing false alerts with sufficient coverage of true failures requires tuning regression tree parameters and rule counts, guided by domain knowledge to define what qualifies as “extreme.” Automating this tuning process remains an area for future research. Second, the number and granularity of temporal predictors  affect false alert rates. Too few predictors yield overly broad rules (underfitting) that increase false positives, whereas too many or high-cardinality predictors can overfit and miss genuine failures (false negatives). Temporal predictors should therefore match the time series’ frequency and duration characteristics. Finally, TreeAlert assumes a stable error distribution. Shifts in model behavior can alter this distribution, invalidating previously learned patterns. Retraining on recent forecast errors may restore alignment. Future work could explore adaptive learning or sliding-window approaches to handle non-stationary error dynamics more effectively.
+
+\begin{table}[H]
+\centering
+\caption{\textit{How TreeAlert Embodies the Design Principles for Pattern-Based Error Prediction}}
+\small
+\begin{tabular}{|m{2.5cm}|m{13cm}|}
+\hline
+\centering\textit{Pattern-focus} &
+TreeAlert is explicitly designed to uncover patterns of model failure \\
+\hline
+\centering\textit{Actionability} &
+Outputs are interpretable, human-readable rules that managers can use to mitigate risk and data scientists can use for model improvement \\
+\hline
+\centering\textit{Diverse Error Patterns} &
+TreeAlert accommodates a wide range of extreme error sources such as steep peaks, sparse data, misaligned seasonality, and slow model adjustment. \\
+\hline
+\centering\textit{Transparency} &
+TreeAlert produces a transparent interpretable rule-based output \\
+\hline
+\centering\textit{Prospective} &
+TreeAlert predicts the future timing and context of potential model failures \\
+\hline
+\centering\textit{Local Performance} &
+TreeAlert’s evaluation is based on metrics that capture local performance during model failures (rule-specific precision, RMSE, etc.) \\
+\hline
+\centering\textit{Model-agnostic} &
+TreeAlert operates on forecast errors from any forecasting algorithm. Its design does not rely on model-specific assumptions, making it adaptable across methodologies and software platforms \\
+\hline
+\centering\textit{Operational Integrability} &
+TreeAlert is operationally efficient across its full pipeline. At the data level, it uses parsimonious inputs (errors and timestamps). At the training level, its use of regression trees ensures low computational overhead. At the deployment level it produces simple rules that can be integrated into existing dashboards or automated forecasting systems with minimal burden. \\
+\hline
+\end{tabular}
+\label{tab:design}
+\end{table}
+
+Beyond TreeAlert's methodological contributions, this work proposes eight design principles to guide the development of future methods for predicting patterns of extreme failures. Table \ref{tab:design} summarizes how TreeAlert aligns with these principles, and highlights its practical and theoretical contributions to pattern-based error prediction. Rather than relying on ad hoc approaches centered on accuracy metrics or retrospective diagnostics, our framework prioritizes the identification of error patterns, interpretable outputs, and operational relevance. These principles guide the design of methods aimed not only at detection but also at anticipation and intervention. By formalizing these criteria, we enable a more systematic development of error analysis techniques that are both practically deployable and theoretically grounded.
+
+\clearpage
+
+% %\THEEndNotes
+% \begingroup \parindent 0pt \parskip 0.0ex \def\enotesize{\normalsize} \theendnotes \endgroup
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Appendix
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{APPENDIX}{Focusing on Both Over-forecasting and Under-forecasting: Alternative Rule Extraction and Filtering}
+\label{append-A}
+
+When domain considerations prioritize predicting both extreme over- and under-forecast failure patterns, TreeAlert can be set to retain both positive and negative mean error rules rather than the most extreme absolute mean errors. 
+This section supplements Section~\ref{sec:rule-extraction} (Rule Extraction and Filtering) and Section~3.5 (Rule Visualization) by illustrating a variant of the Rule Extraction and Filtering step. 
+
+In the electricity demand example, choosing the top-$k$ terminal nodes by absolute mean error resulted in only under-forecast patterns due to their mean magnitudes being most dominant. To reveal over-forecast patterns as well, we partition terminal nodes by the sign of their mean error and then rank separately within each partition. Formally, let $\bar e_j$ denote the mean error for terminal-node $j$. Define $P=\{j:\bar e_j>0\}$, where $P$ is the set of all rules that represent \textit{under-forecasting} patterns (positive mean error), and $N=\{j:\bar e_j<0\}$, where $N$ is the set of all rules that represent \textit{over-forecasting} patterns (negative mean error). Order $P$ in descending $\bar e_j$ and $N$ in ascending $\bar e_j$. Retain the top $k_1$ nodes from $P$ and the top $k_2$ nodes from $N$ to form the final rule set:
+\begin{equation}
+\mathcal{R} = \{\, r_j \;|\; j \in P_{k_1} \cup N_{k_2} \,\},
+\end{equation}
+where $r_j$ denotes the decision rule associated with terminal node $j$, and $P_{k_1}$ and $N_{k_2}$ are the index sets of the top $k_1$ under-forecasting and top $k_2$ over-forecasting nodes, respectively. In this formulation, the total number of retained rules is $k = k_1 + k_2$. 
+
+This alternative rule filtering method prevents one error direction from monopolizing the top-$k$ list and addresses cases where dips are not flagged because their node means are smaller in magnitude than peaks. However, this adjustment comes at the cost of retaining some rules whose mean errors are less extreme than those in a purely absolute-ranked selection. This may reduce overall rule precision by increasing the likelihood of false positives, as these less extreme terminal nodes are more likely to capture conditions that produce non-extreme errors. Consequently, the decision to apply this variant should weigh the value of balanced directional coverage against the potential reduction in precision.
+
+In the example below, we revisit the electricity demand demonstration, selecting the three nodes with the highest positive average errors and the three with the lowest negative average errors ($k_1 = k_2 = 3$, yielding $k = 6$) while holding all other parameters constant. These six rules are displayed in Table~\ref{tab:treealert_rules} and visualized in Figure~\ref{fig:3x3}.
+
+\begin{table}[b]
+\caption{Interpreted tree rules for terminal nodes with top three positive and negative mean errors}
+\centering
+\label{tab:treealert_rules}
+\small
+\begin{tabular}{r p{13cm}}
+\hline
+\textbf{Avg.~Error} & \textbf{Rule (Interpreted)} \\
+\hline
+$4621.59$  & The model under forecasts by an average of 4622 when Day of Week is Sunday through Monday, Hour is 5PM–6PM, and Minute is 0–14. \\
+$3757.46$  & The model under forecasts by an average of 3757 when Day of Week is Tuesday through Saturday, Hour is 5PM–7PM, and Minute is 15–44. \\ 
+$3626.57$  & The model under forecasts by an average of 3627 when Day of Week is Sunday through Wednesday, Hour is 2AM and 12AM, and Minute is 15–44. \\
+$-1398.24$ & The model over forecasts by an average of –1398 when Day of Week is Sunday, Hour is 2PM, and Minute is 0–14 and 30–59. \\
+$-606.43$  & The model over forecasts by an average of –606 when Day of Week is Sunday, Hour is 3PM, and Minute is 0–14 and 30–59.\\
+$-534.00$  & The model over forecasts by an average of –534 when Day of Week is Sunday, Hour is 1PM and 4PM, and Minute is 0–14.\\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \small
+    \caption{Example of TreeAlert retaining both positive and negative mean error rules}
+  \includegraphics[width=1\linewidth]{Figures/Elec_3x3_both.png}
+  \label{fig:3x3}
+\end{figure}
+
+\FloatBarrier
+\end{APPENDIX}
+
+
+% Acknowledgments here
+%\ACKNOWLEDGMENT{We extend our sincere gratitude to Ta-Chun Kuan and Carolin Su for their contributions to the development of this research.}
+
+
+% References here (outcomment the appropriate case)
+
+% CASE 1: BiBTeX used to constantly update the references
+%   (while the paper is being written).
+%\bibliographystyle{informs2014} % outcomment this and next line in Case 1
+%\bibliography{<your bib file(s)>} % if more than one, comma separated
+
+%\bibliographystyle{informs2014} % outcomment this and next line in Case 1
+%\bibliography{sample} % if more than one, comma separated
+
+% CASE 2: BiBTeX used to generate mypaper.bbl (to be further fine tuned)
+%\input{mypaper.bbl} % outcomment this line in Case 2
+
+%If you don't use BiBTex, you can manually itemize references as shown below.
+
+%\bibliographystyle{nonumber}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% References
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Use INFORMS reference style and your references.bib file
+\bibliographystyle{informs2014}
+\bibliography{references}
+
+% \begin{thebibliography}{3}
+% \providecommand{\natexlab}[1]{#1}
+% \providecommand{\url}[1]{\texttt{#1}}
+% \providecommand{\urlprefix}{URL }
+
+% \bibitem[{Smith(2005)}]{smith2005}
+% Smith J (2005) Optimal resource allocation in humanitarian logistics.
+%   \emph{Journal of Operations Research} 30(2):123--135.
+  
+% \bibitem[{Jones(2010)}]{jones2010}
+% Jones S (2010) Stochastic programming models for humanitarian logistics.
+%   \emph{INFORMS Mathematics of Operations Research} 35(4):567--580.
+
+% \bibitem[{Brown(2015)}]{brown2015}
+% Brown D (2015) \emph{Introduction to Stochastic Programming} (Springer).
+
+% \end{thebibliography}
+
+
+%%%%%%%%%%%%%%%%%
+\end{document}
+%%%%%%%%%%%%%%%%%
+
+
+

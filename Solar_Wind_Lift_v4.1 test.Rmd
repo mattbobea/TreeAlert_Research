@@ -1,0 +1,1148 @@
+---
+title: "Eval Tree Analysis Code"
+author: "Bobea"
+date: "2024-02-03"
+output: html_document
+---
+##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+##                      TreeAlert Solar Wind Example                         
+##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+load data
+```{r, include=FALSE, warning=FALSE, message=FALSE}
+# 2. Load the four specific files shown in the screenshot
+# # We use file.path to ensure the slashes are handled correctly for Windows
+# load(file.path(base_path, "train_solar_v2.RData"), verbose = TRUE)
+# load(file.path(base_path, "train_wind_v2.RData"), verbose = TRUE)
+# load(file.path(base_path, "test_wind_v2.RData"), verbose = TRUE)
+# load(file.path(base_path, "test_solar_v2.RData"), verbose = TRUE)
+```
+Libraries
+```{r, include=FALSE, warning=FALSE, message=FALSE}
+options(scipen = 999)
+library(readr); library(tidyr); library(feasts); library(scoringRules) # For Data
+library(tsibble); library(fable); library(fabletools) # For Forecasting
+library(dplyr); library(lubridate); library(gains) # For Data Wrangling
+library(ggplot2); library(ggtext); library(grid); library(gridExtra); # Plot
+library(slider) # Plot
+library(scales); library(rpart);  library(rpart.plot);
+```
+Define Functions:
+```{r}
+temporal_encoding <- function(data) {
+  # Convert Time column to Date-Time format and create temporal features
+   data <- data %>%
+    mutate(
+      Time = parse_date_time(Time, orders = c("ymd HMS", "ymd HM", "ymd H", "ymd")),
+      Hour = factor(hour(Time)),
+      Minute = factor(minute(Time)),
+      Weekday = factor(lubridate::wday(Time, label = TRUE)),
+      DayofMonth = factor(mday(Time)),
+      WeekofMonth = factor(ceiling(day(Time) / 7)),
+      Month = factor(lubridate::month(Time, label = TRUE))
+    ) %>%
+    arrange(Time)
+
+ # Number of hours in 1–4 weeks
+week_lags <- c(168, 336, 504, 672)
+
+for (i in seq_along(week_lags)) {
+  lag_name <- paste0("Lag_", i, "_Week")
+  data[[lag_name]] <- dplyr::lag(data$.resid, n = week_lags[i])
+}
+
+  # Fill NAs in all lag columns with previous value
+  data <- data %>%
+    arrange(Time) %>%
+    fill(starts_with("Lag_"), .direction = "down")
+
+  return(data)
+}
+
+# process_data converts a random df into a format usable by Tree Alert!
+process_data <- function(data, time_col, actual_col, forecast_col) {
+
+  data %>%
+    # Select specified columns and rename them
+    #dplyr::select({{ time_col }}, {{ actual_col }}, {{ forecast_col }}) %>%
+    dplyr::rename(
+      Time = {{ time_col }},         # Rename timestamp
+      actual = {{ actual_col }},     # Rename actual load
+      forecast = {{ forecast_col }}  # Rename forecast load
+    ) %>%
+    # Convert to datetime and handle multiple possible formats
+    dplyr::mutate(
+      Time = parse_date_time(Time, orders = c("ymd HMS", "ymd HM", "mdy HMS", "mdy HM", "dmy HMS", "dmy HM")),
+      .resid = winkler_score     #  for forecast error
+    ) %>%
+    na.omit()                        # Remove any NA values
+}
+
+# To generate geom_point layers for 'All Filters Actual Vs Predicted'
+add_fitted_points_func <- function(data_list, color_list, shape_values) {
+  layers <- lapply(seq_along(data_list), function(i) {
+    geom_point(data = data_list[[i]], 
+               aes(x = Time, y = Value, shape = .resid >= top_5_percent_value | .resid <= bottom_5_percent_value),
+               size = 2.5, stroke = 1, color = color_list[i])
+  })
+  return(layers)
+}
+
+# To generate geom_point layers for 'All Filters Residuals'
+add_resid_points_func <- function(data_list, color_list, shape_values) {
+  layers <- lapply(seq_along(data_list), function(i) {
+    geom_point(data = data_list[[i]], 
+               aes(x = Time, y = .resid, shape = .resid >= top_5_percent_value | 
+                     .resid <= bottom_5_percent_value),
+               size = 2.5, stroke = 1, color = color_list[i])
+  })
+  return(layers)
+}
+
+# Function to create the plot for a specific month
+create_monthly_plot <- function(data, start_date, end_date) {
+  plot <- ggplot(data, aes(x = Time)) +
+    geom_line(aes(y = Value, color = "Actual"), show.legend = FALSE) +
+    geom_line(aes(y = model_1, color = "Fitted"), alpha = 0.6, show.legend = FALSE) +
+    # changed to skip rules 1-2 
+    add_fitted_points_func(list_of_dfs[start_row:length(list_of_dfs)], 
+                       color_string[start_row:length(list_of_dfs)], 
+                       c("TRUE" = 1, "FALSE" = 16))
+    #add_fitted_points_func(list_of_dfs, color_string, # make geom_point layers
+    #                                  c("TRUE" = 1, "FALSE" = 16)) + 
+    scale_shape_manual(values = c("TRUE" = 1, "FALSE" = 16)) +
+    scale_color_manual(values = c("Actual" = "#4682B4", "Fitted" = "#FF8C00")) +
+    scale_x_datetime(limits = as.POSIXct(c(start_date, end_date)), 
+                     date_labels = "%m-%d",
+                     #date_breaks = "3 days",
+                     expand = c(0.02, 0.02)) +
+    labs(title = paste(""), x = NULL, y = NULL, color = "Variable") +
+    theme_bw() +
+    theme(legend.position = "none",
+          plot.title = element_markdown(size = 10),
+          plot.title.position = "panel")
+  
+  return(plot)
+}
+
+# -------------------- Lift Functions --------------------
+compute_lift_numeric <- function(df, actual_col, pred_col, n_groups = 20) {
+  # Lift is calculated using all data, but only returns lift for the first group  
+  actual <- abs(df[[actual_col]])
+  score  <- abs(df[[pred_col]])
+  
+  # Sort by predicted risk
+  ord        <- order(score, decreasing = TRUE)
+  actual_ord <- actual[ord]
+  n          <- length(actual_ord)
+  
+  # Ventile grouping
+  group <- ceiling(seq_len(n) / (n / n_groups))
+  group[group > n_groups] <- n_groups
+  
+  df_lift <- data.frame(group = group, error = actual_ord) %>%
+    dplyr::group_by(group) %>%
+    dplyr::summarise(meanError = mean(error, na.rm = TRUE), .groups = "drop")
+  
+  # Normalize
+  df_lift$meanError <- df_lift$meanError / mean(actual_ord, na.rm = TRUE)
+  
+  # Return first ventile lift
+  df_lift$meanError[df_lift$group == 1]
+}
+
+make_lift_charts <- function(df, actual_col, pred_col, title_prefix = "Model") {
+  
+  actual <- abs(df[[actual_col]])
+  score  <- abs(df[[pred_col]])
+  
+  # Sort by predicted risk
+  ord <- order(score, decreasing = TRUE)
+  actual_ord <- actual[ord]
+  n <- length(actual_ord)
+  
+  # Cumulative gains
+  df_cum <- data.frame(
+    ncases  = c(0, seq_len(n)),
+    cumError = c(0, cumsum(actual_ord))
+  )
+  
+  # Ventiles
+  n_groups <- 20
+  group <- ceiling(seq_len(n) / (n / n_groups))
+  group[group > n_groups] <- n_groups
+  
+  df_lift <- data.frame(
+    group = group,
+    error = actual_ord
+  ) %>%
+    dplyr::group_by(group) %>%
+    dplyr::summarise(meanError = mean(error), .groups = "drop")
+  
+  df_lift$percentile <- df_lift$group * 5
+  df_lift$meanError  <- df_lift$meanError / mean(actual_ord)
+  
+  g1 <- ggplot(df_cum, aes(ncases, cumError)) +
+    geom_line(color = "#4682B4") +
+    geom_abline(slope = sum(actual_ord)/n, intercept = 0,
+                linetype = "dashed", color = "gray") +
+    labs(title = paste(title_prefix, "– Cumulative Gains"),
+         x = "# Cases", y = "Cumulative Error") +
+    theme_minimal()
+  
+  g2 <- ggplot(df_lift, aes(percentile, meanError)) +
+    geom_col(fill = "#FF8C00") +
+    labs(title = paste(title_prefix, "– Ventile Lift"),
+         x = "Percentile", y = "Ventile Mean / Global Mean") +
+    theme_minimal()
+  
+  gridExtra::grid.arrange(g1, g2, ncol = 2)
+  
+  df_lift$meanError[df_lift$percentile == 5]
+}
+
+# --Compute lift-- 
+compute_lift <- function(data, model, pred_col_name, label, plot = TRUE, n_groups = 20) {
+
+  # Remove existing prediction column if present
+  data <- data %>% dplyr::select(-dplyr::any_of(pred_col_name))
+
+  # Predict leaf-node values (force numeric)
+  leaf_nodes <- as.numeric(predict(model, newdata = data, type = "vector"))
+
+  # Attach predictions
+  data_with_pred <- dplyr::bind_cols(
+    data,
+    !!pred_col_name := leaf_nodes
+  )
+
+  # Plot or numeric lift
+  lift_value <- if (plot) {
+    make_lift_charts(
+      df           = data_with_pred,
+      actual_col   = ".resid",
+      pred_col     = pred_col_name,
+      title_prefix = label
+    )
+  } else {
+    compute_lift_numeric(
+      df         = data_with_pred,
+      actual_col = ".resid",
+      pred_col   = pred_col_name,
+      n_groups   = n_groups
+    )
+  }
+
+  cat(label, "Lift (First Ventile):", lift_value, "\n")
+
+  return(list(
+    lift        = lift_value,
+    merged_data = data_with_pred
+  ))
+}
+
+# -------------------- Prep Parameters --------------------
+color_string <- c("#9400D3", "#008000", "#0000FF", "#FF8C00", "#000066",
+                  "#FF00FF", "#AB0000", "#FF69B4", "#7B68EE", "#Ff0000", 
+                  "#7B68EE", "#20B2AA", "#703366", "#32CD32", "#CC6633", 
+                  "#C77CFF", "#8A2BE2", "#00FF7F", "#00BFFF", "#FFA500", 
+                  "#66CDAA", "#BA55D3", "#00CED1", "#4682B4", "#00FFFF")
+```
+Load files 
+```{r, warning=FALSE}
+ base_path <- "C:/Users/Kagebi/Documents/Research/TreeAlert and Lift/solar_wind/"
+  load(file.path(base_path, "all_wind_merged.RData"), verbose = TRUE)
+
+# Select only the timestamp columns (1-2) and your specified columns using dplyr
+raw_data <- all_wind_data
+```
+# START!  
+Select your data!
+```{r}
+#Format the timestamp to ISO 8601 (T and Z format)
+# This converts the POSIXct object into the character string format your raw_data uses
+all_wind_data[, valid_datetime := format(valid_datetime, format = "%Y-%m-%dT%H:%M:%SZ")]
+
+# # Define the specific column names you want to keep
+# Actual_column <- "actual"
+# Forecast_column <- "forecast"
+# time_col = "valid_datetime"
+# 
+# 
+# data_start <-"2020-09-20 00:30:00" 
+# data_end <-"2023-06-01 23:30:00"
+# 
+# train_start <- "2020-09-20 00:30:00"
+# train_end <- "2023-02-01 00:00:00"
+# 
+# test_start <- train_end 
+# test_end<- data_end 
+# 
+# #How many rules? 
+# TOP_K_RULES <- 5
+
+# 6-Month Window (Keep Start)
+# ----------------------------
+data_start <- "2020-09-01 00:00:00"
+data_end   <- "2021-03-01 00:00:00"
+
+# ~80/20 split (5 months / 1 month)
+train_start <- data_start
+train_end   <- "2021-02-01 00:00:00"
+
+test_start  <- train_end
+test_end    <- data_end
+
+# Number of top rules
+TOP_K_RULES <- 5
+#--------------------------------------------------------
+
+data_df <- process_data(
+  raw_data, 
+  time_col = time_col, 
+  actual_col = Actual_column, 
+  forecast_col = Forecast_column
+)
+
+# Reduce data size with a Time Filter (Optional)
+data_df <- data_df[data_df$Time >= as.POSIXct(data_start, tz = "UTC"), ]
+data_df <- data_df[data_df$Time < as.POSIXct(data_end, tz = "UTC"), ]
+```
+Create a new data frame that matches the structure of data_df
+```{r}
+# Aggregate by hour for more clear plots
+data_filtered <- data_df %>%
+  mutate(hour = format(Time, "%Y-%m-%d %H")) %>%
+  group_by(hour) %>%
+  filter(actual == max(actual)) %>%
+  ungroup() %>%
+  select(-hour) 
+
+data_df <- temporal_encoding(data_filtered) 
+
+# Create a copy with the required columns and modifications
+data_df <- data_df %>%
+  mutate(
+    Value = actual,
+    .fitted = forecast,
+    .resid = .resid
+  ) %>%
+  select(-actual, -forecast) %>%
+  as_tibble()  # Convert to tibble if consistency is needed
+
+#------------------------------------
+#Data Post Processing + ~~ TRAIN TEST SPLIT ~~
+
+#option 2 --  use time to split
+train_set <- data_df[data_df$Time > as.POSIXct(train_start, tz = "UTC") & 
+                    data_df$Time < as.POSIXct(train_end, tz = "UTC"),]
+test_set <- data_df[data_df$Time >= as.POSIXct(test_start, tz = "UTC") & 
+                    data_df$Time < as.POSIXct(test_end, tz = "UTC"),]
+
+
+# cap Outliers (top only)
+cap_99 <- quantile(train_set$.resid, 0.99, na.rm = TRUE)
+
+train_set$.resid <- pmin(train_set$.resid, cap_99)
+test_set$.resid  <- pmin(test_set$.resid,  cap_99)
+data_df$.resid   <- pmin(data_df$.resid,   cap_99)
+
+#------------Top bottom 5% of data tree ------------
+# Calculate quantiles
+top_5_percent <- quantile(train_set$.resid, probs = 0.95, na.rm = TRUE)
+bottom_5_percent <- quantile(train_set$.resid, probs = 0.05, na.rm = TRUE)
+# Extract values
+top_5_percent_value <- top_5_percent[[1]] 
+bottom_5_percent_value <- bottom_5_percent[[1]]
+```
+# Make Trees & Pull Rules
+```{r}
+#------------Regression tree on .resid + temporal variables------------
+tree_model <- rpart(.resid ~ Minute + Hour + Weekday,
+                    data = train_set, method = "anova", 
+                    cp = 0.0000, minbucket = 10, maxdepth = 10)
+# cp = 0.000, minbucket = 3
+# cp = 0.00006, minbucket = 2
+# + DayofMonth+ WeekofMonth, + Lag_2_Week + Minute +
+tree_rules <- rpart.rules(tree_model, cover = FALSE, digits = 4, nn = FALSE)
+
+#Attached the predicted tree nodes to DF and Maps rules/leafs to Observations
+leaf_nodes <- predict(tree_model, newdata = data_df, type = "vector")
+heart_merged_with_leaf <- dplyr::bind_cols(data_df, Leaf_Node = leaf_nodes)
+
+#Lift Analysis
+# update lift groupings.  e.g. decile, ventile, ect. 
+N_GROUPS <- 20
+
+# Calc lift
+train_results <- compute_lift(train_set, tree_model, "Leaf_Node","Baseline (Train)", 
+                              plot = TRUE, n_groups = N_GROUPS)
+test_results  <- compute_lift(test_set,  tree_model, "Leaf_Node", "Baseline (Test)",
+                              plot = TRUE, n_groups = N_GROUPS)
+full_results  <- compute_lift(data_df,   tree_model, "Leaf_Node", "Baseline (Full)",  
+                              plot = TRUE, n_groups = N_GROUPS)
+```
+
+## Grid Search: Joint Optimization of Tree Parameters + Predictor Variables  ##
+```{r}
+## Grid Search: Sensitivity Analysis + Full Logging  ##
+
+library(tibble)
+
+# ------------------------------------------------------------------
+# 1. Initialize results table
+# ------------------------------------------------------------------
+sensitivity_results <- tibble(
+  run_id           = integer(),
+  cp               = numeric(),
+  minbucket        = integer(),
+  maxdepth         = integer(),
+  vars             = character(),
+  train_lift       = numeric(),
+  test_lift        = numeric(),
+  full_lift        = numeric(),
+  train_precision  = numeric(),
+  test_precision   = numeric(),
+  train_flagged    = integer(),
+  test_flagged     = integer(),
+  train_tp         = integer(),
+  train_fp         = integer(),
+  test_tp          = integer(),
+  test_fp          = integer()
+)
+
+# ------------------------------------------------------------------
+# 2. Candidate predictors + grid
+# ------------------------------------------------------------------
+
+
+param_grid <- expand.grid(
+  cp        = c(0, 0.0001, 0.001),
+  minbucket = c(5, 10, 20),
+  maxdepth  = c(5, 10, 15),
+  vars      = var_combinations,
+  stringsAsFactors = FALSE
+)
+param_grid$vars <- "Hour + Weekday + Month"
+
+# ------------------------------------------------------------------
+# 3. Grid search loop with TOP-K RULE EVALUATION
+# ------------------------------------------------------------------
+
+for (i in seq_len(nrow(param_grid))) {
+
+  params <- param_grid[i, ]
+  fmla   <- .resid ~ Hour + Weekday + Month
+
+  model <- rpart(
+    fmla,
+    data   = train_set,
+    method = "anova",
+    control = rpart.control(
+      cp        = params$cp,
+      minbucket = params$minbucket,
+      maxdepth  = params$maxdepth
+    )
+  )
+
+  # ------------------------------------------------------------
+  # LIFT (unchanged – whole-tree ranking quality)
+  # ------------------------------------------------------------
+  train_lift <- compute_lift_numeric(
+    df = bind_cols(train_set, Leaf_Node = predict(model, train_set)),
+    actual_col = ".resid",
+    pred_col   = "Leaf_Node"
+  )
+
+  test_lift <- compute_lift_numeric(
+    df = bind_cols(test_set, Leaf_Node = predict(model, test_set)),
+    actual_col = ".resid",
+    pred_col   = "Leaf_Node"
+  )
+
+  full_lift <- compute_lift_numeric(
+    df = bind_cols(data_df, Leaf_Node = predict(model, data_df)),
+    actual_col = ".resid",
+    pred_col   = "Leaf_Node"
+  )
+
+  # ------------------------------------------------------------
+  # STEP 2: Extract TOP-K highest-risk LEAF RULES (SCALABLE)
+  # ------------------------------------------------------------
+  train_tmp <- bind_cols(
+    train_set,
+    Leaf_Node = predict(model, train_set)
+  )
+
+  leaf_summary <- train_tmp %>%
+    group_by(Leaf_Node) %>%
+    summarise(
+      mean_resid = mean(.resid, na.rm = TRUE),
+      .groups = "drop"
+    )
+
+  top_k_rules <- leaf_summary %>%
+    arrange(desc(abs(mean_resid))) %>%
+    slice(1:TOP_K_RULES) %>%
+    pull(Leaf_Node)
+
+  # ------------------------------------------------------------
+  # PRECISION (TRAIN) – ONLY observations in top-K leaves
+  # ------------------------------------------------------------
+  train_flagged_idx <- train_tmp$Leaf_Node %in% top_k_rules
+  train_flagged     <- sum(train_flagged_idx)
+
+  train_tp <- sum(
+    train_flagged_idx &
+    abs(train_tmp$.resid) >= top_5_percent_value
+  )
+
+  train_fp <- train_flagged - train_tp
+
+  train_precision <- ifelse(
+    train_flagged > 0,
+    train_tp / train_flagged,
+    NA_real_
+  )
+
+  # ------------------------------------------------------------
+  # PRECISION (TEST) – ONLY observations in top-K leaves
+  # ------------------------------------------------------------
+  test_tmp <- bind_cols(
+    test_set,
+    Leaf_Node = predict(model, test_set)
+  )
+
+  test_flagged_idx <- test_tmp$Leaf_Node %in% top_k_rules
+  test_flagged     <- sum(test_flagged_idx)
+
+  test_tp <- sum(
+    test_flagged_idx &
+    abs(test_tmp$.resid) >= top_5_percent_value
+  )
+
+  test_fp <- test_flagged - test_tp
+
+  test_precision <- ifelse(
+    test_flagged > 0,
+    test_tp / test_flagged,
+    NA_real_
+  )
+
+  # ------------------------------------------------------------
+  # SAVE RUN
+  # ------------------------------------------------------------
+  sensitivity_results <- bind_rows(
+    sensitivity_results,
+    tibble(
+      run_id          = i,
+      cp              = params$cp,
+      minbucket       = params$minbucket,
+      maxdepth        = params$maxdepth,
+      vars            = params$vars,
+      train_lift      = train_lift,
+      test_lift       = test_lift,
+      full_lift       = full_lift,
+      train_precision = train_precision,
+      test_precision  = test_precision,
+      train_flagged   = train_flagged,
+      test_flagged    = test_flagged,
+      train_tp        = train_tp,
+      train_fp        = train_fp,
+      test_tp         = test_tp,
+      test_fp         = test_fp
+    )
+  )
+}
+
+
+
+# ------------------------------------------------------------------
+# 4. Select best model (by train lift)
+# ------------------------------------------------------------------
+best_params <- sensitivity_results %>%
+  filter(!is.na(train_lift)) %>%
+  arrange(desc(train_lift)) %>%
+  slice(1)
+
+cat("\n=============================\n")
+cat("  BEST GRID SEARCH MODEL\n")
+cat("=============================\n")
+print(best_params, width = Inf)
+
+ View(sensitivity_results)
+ write.csv(sensitivity_results, "treealert_sensitivity_analysis2.csv", row.names = FALSE)
+
+```
+Train Final Model using Best Parameters
+```{r}
+###############################################################################
+## Train Final Model using Best Parameters + Best Variable Combination
+###############################################################################
+
+# Build formula dynamically from best_params$vars
+#final_formula <- as.formula(paste(".resid ~", best_params$vars))
+
+cat("\n=============================\n")
+cat("  FINAL MODEL FORMULA USED\n")
+cat("=============================\n")
+print(final_formula)
+
+final_formula <- .resid ~  Hour + Weekday + Month 
+
+# Train final rpart model
+best_tree_model <- rpart(
+  final_formula,
+  data = train_set,
+  method = "anova",
+  control = rpart.control(
+    cp        = 0.0001, #best_params$cp,
+    minbucket = 5, #best_params$minbucket,
+    maxdepth  = 15 #best_params$maxdepth
+  )
+)
+
+# Display tree rules
+#cat("\n=============================\n")
+#cat("        FINAL TREE RULES\n")
+#cat("=============================\n")
+#tree_rules <- rpart.rules(best_tree_model, cover = FALSE, digits = 4, 
+#                          nn = FALSE)
+#print(tree_rules)
+
+# Attach predicted leaf node averages to full dataset
+leaf_nodes <- predict(best_tree_model, newdata = data_df, type = "vector")
+heart_merged_with_leaf <- dplyr::bind_cols(data_df, Leaf_Node = leaf_nodes)
+
+# Preview result
+cat("\n=============================\n")
+cat(" ATTACHED LEAF NODE PREDICTIONS\n")
+cat("=============================\n")
+#print(head(heart_merged_with_leaf))
+```
+## LIFT RESULTS FOR BEST GRID SEARCH MODEL (Train / Test / Full)
+```{r}
+# ---- Train lift (Best model) ----
+best_train_lift <- compute_lift_numeric(
+  df         = train_set %>%
+               dplyr::bind_cols(
+                 Leaf_Node = predict(best_tree_model, newdata = train_set)
+               ),
+  actual_col = ".resid",
+  pred_col   = "Leaf_Node",
+  n_groups   = 20
+)
+
+# ---- Test lift (Best model) ----
+best_test_lift <- compute_lift_numeric(
+  df         = test_set %>%
+               dplyr::bind_cols(
+                 Leaf_Node = predict(best_tree_model, newdata = test_set)
+               ),
+  actual_col = ".resid",
+  pred_col   = "Leaf_Node",
+  n_groups   = 20
+)
+
+# ---- Full-sample lift (Best model) ----
+best_full_lift <- compute_lift_numeric(
+  df         = heart_merged_with_leaf,
+  actual_col = ".resid",
+  pred_col   = "Leaf_Node",
+  n_groups   = 20
+)
+
+# ---- Report results ----
+cat("\n=============================\n")
+cat(" BEST GRID SEARCH MODEL LIFT\n")
+cat("=============================\n")
+cat("Train Lift (First Ventile):", best_train_lift, "\n")
+cat("Test  Lift (First Ventile):", best_test_lift, "\n")
+#cat("Full  Lift (First Ventile):", best_full_lift, "\n")
+```
+# -- DATA VIZ --
+```{r, warning=FALSE, message=FALSE}
+#Map rules to observations and  pull top 10 rules
+start_row <- 1
+end_row   <- TOP_K_RULES
+
+# ------------Pull top K rules by leaf node value------------
+leaf_summary <- heart_merged_with_leaf %>%
+  filter(Time >= as.POSIXct(train_start, tz = "UTC") &
+         Time <  as.POSIXct(train_end,   tz = "UTC")) %>%
+  group_by(Leaf_Node) %>%
+  summarise(mean_resid = mean(.resid, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(abs(mean_resid)))
+
+top_k_leaf_values <- leaf_summary %>%
+  slice(1:TOP_K_RULES) %>%
+  pull(Leaf_Node)
+
+#applies rules as filter and plot results
+
+#------------Filter the rows for each rule for plotting------------
+list_of_dfs <- list() # Create an empty DataFrame to store the results
+for (i in start_row:end_row) {
+
+  filtered_data <- heart_merged_with_leaf %>%
+    filter(Leaf_Node == top_k_leaf_values[i])
+    
+  #------------displays the rule text before each plot------------
+  # Pull the first row from tree_rules
+  first_row <- tree_rules[i, ]
+  # Filter out blank cells
+  non_blank_cells <- first_row[first_row != ""]
+  # Convert the non-blank cells to a single string using paste
+  constructed_sentence <- paste(names(non_blank_cells), non_blank_cells, collapse = " ")
+  rule_text <- textGrob(paste("Rule", i, "\n", constructed_sentence),
+                      gp = gpar(col = "black", fontsize = 9))
+
+    print(constructed_sentence)
+    
+  #------------Plot of filtered rules on fitted time scale------------
+  post_rules_scatter_plot <- ggplot(filtered_data, 
+                                    aes(x = Time, y = .resid)) + 
+    geom_point(aes(color = .resid > 10)) +
+    geom_text(aes(label = format(Time, "%H:%M")), 
+              hjust = -0.1, vjust = 0.5, size = 2) +  # Adding time labels
+    labs(title = "Scatter Plot Highlighted of Residuals", x = "Time", y = "Residual") +
+      scale_color_manual(values = c("FALSE" = "#FF0000", "TRUE" = "#9400D3")) +
+    scale_shape_manual(values = c("TRUE" = 1, "FALSE" = 2)) 
+
+  #------------Create Residual Plot------------
+  #Initiate arguments
+  #shape_number <- ifelse(row <= 25, row, 20)
+  random_color <- rgb(runif(1), runif(1), runif(1), maxColorValue = 255)
+  list_of_dfs[[i]] <- filtered_data # used to save df's for lower plot.
+  
+  # Plot of filtered rules on full series
+  post_rules_line_plot <- ggplot(data_df, 
+                                 aes(x = Time, y = .resid)) +
+    geom_line(color = "#00BFC4") +
+    geom_point(data = filtered_data, 
+               aes(x = Time, y = .resid,
+                   color = .resid >= top_5_percent_value | .resid <= bottom_5_percent_value,
+                   shape = .resid >= top_5_percent_value | .resid <= bottom_5_percent_value),
+                   size = 2.5, stroke = 0.8) +
+    scale_color_manual(values = c("FALSE" = color_string[i], 
+                                  "TRUE" = color_string[i])) +  
+    scale_shape_manual(values = c("TRUE" = 1, "FALSE" = 16)) +
+    labs(title = paste("Residual Plot with Tree Filtered Extreme and Non-extreme Values",
+                       sep=""), x = NULL, y = NULL) +
+    theme_bw() +
+    theme(legend.position = "none") + 
+    theme(plot.title = element_markdown())
+
+    #------------Plot of Actual Vs Predicted------------
+  actual_predicted_plot <- ggplot(data_df, aes(x = Time)) +
+    geom_line(aes(y = Value, color = "Actual"), show.legend = FALSE) +
+    geom_point(data = filtered_data, 
+               aes(x = Time, y = Value, 
+      shape = .resid >= top_5_percent_value | .resid <= bottom_5_percent_value,
+      color = .resid >= top_5_percent_value | .resid <=bottom_5_percent_value),
+                   size = 2.5, stroke = 1, show.legend = FALSE) +  
+    scale_color_manual(values = c("TRUE" = color_string[i], 
+                                  "FALSE" = color_string[i], 
+                                  "Actual" = "#4682B4"),
+                       guide = FALSE) + 
+    scale_shape_manual(values = c("TRUE" = 1, "FALSE" = 16)) +  
+    labs(title = "<span style='color:#4682B4'><b>Actual</b>
+         </span> Electricity Demand + Tree Filtered Points",
+         x = NULL, y = NULL, color = "Variable") +
+    theme(legend.position = "none") +
+    theme_bw() +
+    theme(plot.title = element_markdown()) 
+
+    #Output plots
+     grid.arrange(rule_text, post_rules_scatter_plot, ncol = 1)
+     grid.arrange(post_rules_line_plot, actual_predicted_plot, 
+                  ncol = 1, heights = c(10,10))
+}
+```
+All Rules Plots
+```{r, warning=FALSE, message=FALSE}
+first_test_date <- min(test_set$Time) # marks the date of split
+
+#------------Filtered Actual Vs Predicted Plot------------
+actual_predicted_plot <- ggplot(data_df, aes(x = Time)) +
+  geom_line(aes(y = Value, color = "Actual"),  na.rm = FALSE, show.legend = FALSE) +
+  geom_line(aes(y = .fitted, color = "Fitted"), 
+            alpha = 0.6, show.legend = FALSE) +
+  add_fitted_points_func(list_of_dfs, color_string, 
+                                      c("TRUE" = 1, "FALSE" = 16)) + 
+  scale_shape_manual(values = c("TRUE" = 1, "FALSE" = 16)) +
+  scale_color_manual(values = c("Actual" = "#4682B4", "Fitted" = "#FF8C00")) +
+  labs(title = "<span style='color:#4682B4'><b>Actual</b></span> & 
+       <span style='color:#FF8C00'><b>Fitted</b></span> Electricity Demand", 
+       x = NULL, y = NULL, color = "Variable") +
+  geom_vline(xintercept = as.numeric(first_test_date), linetype = "dotted", color = "red", size = 1) +  # Add red dotted line
+  theme_bw() +
+  theme(legend.position = "none") + 
+  theme(plot.title = element_markdown(size = 10))
+actual_predicted_plot
+
+#------------Filtered Residual Plots------------
+residual_plot <- ggplot(data_df , aes(x = Time)) +
+  geom_line(aes(y = .resid, color = "Actual"),  na.rm = FALSE, show.legend = FALSE) +
+  add_resid_points_func(list_of_dfs, color_string, # Generate geom_point layers
+                                      c("TRUE" = 1, "FALSE" = 16)) + 
+  scale_shape_manual(values = c("TRUE" = 1, "FALSE" = 16)) +
+  scale_color_manual(values = c("Actual" = "#00BFC4")) +
+  labs(title = "CRPS", x = NULL, y = NULL, color = "Variable") + 
+  geom_vline(xintercept = as.numeric(first_test_date), linetype = "dotted", 
+             color = "red", size = 1) +  # Add red dotted line
+  theme_bw() + theme(legend.position = "none") + 
+  theme(plot.title = element_markdown(size = 10)) 
+residual_plot
+
+two_plots <- grid.arrange(actual_predicted_plot, residual_plot, ncol = 1)
+# Export the plot
+ggsave("Electricity4.png", 
+       plot = two_plots, width = 6, height = 4.5, dpi = 800) 
+```
+
+Calculate Precision and Related Metrics 
+```{r}
+#Calculate Precision for Train Set
+train_filtered <- heart_merged_with_leaf %>%
+  filter(Time >= as.POSIXct(train_start, tz = "UTC") & 
+         Time <  as.POSIXct(train_end,   tz = "UTC"))
+
+flagged_times <- bind_rows(list_of_dfs) %>%
+  filter(Time >= as.POSIXct(train_start, tz = "UTC") & 
+         Time <  as.POSIXct(train_end,   tz = "UTC")) %>%
+  pull(Time)
+
+train_metrics <- train_filtered %>%
+  mutate(
+    is_actual_extreme = (.resid >= top_5_percent_value | .resid <= bottom_5_percent_value),
+    is_flagged = Time %in% flagged_times,
+
+    true_positive  = is_actual_extreme & is_flagged,
+    false_positive = !is_actual_extreme & is_flagged
+  )
+
+tp <- sum(train_metrics$true_positive)
+fp <- sum(train_metrics$false_positive)
+
+precision <- tp / (tp + fp)
+
+cat("\n--- Train Set Performance ---\n")
+cat("Total flagged points:", tp + fp, "\n")
+cat("Correctly identified extremes (TP):", tp, "\n")
+cat("Incorrectly flagged (FP):", fp, "\n")
+cat("Precision:", round(precision * 100, 2), "%\n")
+
+# Calculate Precision for Test Set
+
+test_filtered <- heart_merged_with_leaf %>%
+  filter(Time >= as.POSIXct(test_start, tz = "UTC") & 
+         Time <  as.POSIXct(test_end,   tz = "UTC"))
+
+flagged_times_test <- bind_rows(list_of_dfs) %>%
+  filter(Time >= as.POSIXct(test_start, tz = "UTC") & 
+         Time <  as.POSIXct(test_end,   tz = "UTC")) %>%
+  pull(Time)
+
+test_metrics <- test_filtered %>%
+  mutate(
+    is_actual_extreme = (.resid >= top_5_percent_value | .resid <= bottom_5_percent_value),
+    is_flagged = Time %in% flagged_times_test,
+
+    true_positive  = is_actual_extreme & is_flagged,
+    false_positive = !is_actual_extreme & is_flagged
+  )
+
+tp_test <- sum(test_metrics$true_positive)
+fp_test <- sum(test_metrics$false_positive)
+
+precision_test <- tp_test / (tp_test + fp_test)
+
+cat("\n--- Test Set Performance ---\n")
+cat("Total flagged points:", tp_test + fp_test, "\n")
+cat("Correctly identified extremes (TP):", tp_test, "\n")
+cat("Incorrectly flagged (FP):", fp_test, "\n")
+cat("Precision:", round(precision_test * 100, 2), "%\n")
+```
+# TreeAlert Sensitivity Analysis – Visualization Block
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(scales)
+library(corrplot)
+
+# ------------------------------------------------------------
+# Load sensitivity results
+# ------------------------------------------------------------
+sens <- sensitivity_results
+
+# ------------------------------------------------------------
+# 1. Lift–Precision Tradeoff Scatter Plot
+# ------------------------------------------------------------
+ggplot(
+  sens,
+  aes(
+    x = test_lift,
+    y = test_precision,
+    color = factor(maxdepth),
+    size = test_flagged
+  )
+) +
+  geom_point(alpha = 0.7) +
+  scale_size_continuous(
+    name = "Flagged periods (test)",
+    labels = comma
+  ) +
+  scale_color_brewer(
+    palette = "Set1",
+    name = "Tree max depth"
+  ) +
+  labs(
+    title = "Lift–Precision Tradeoff Across TreeAlert Configurations",
+    x = "Test Lift (First Ventile)",
+    y = "Test Precision"
+  ) +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold"))
+
+# ------------------------------------------------------------
+# 2. Stability Plot Across Variable Sets (Mean ± SD)
+# ------------------------------------------------------------
+vars_stability <- sens %>%
+  group_by(vars) %>%
+  summarise(
+    mean_test_lift = mean(test_lift, na.rm = TRUE),
+    sd_test_lift   = sd(test_lift, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(mean_test_lift))
+
+ggplot(
+  vars_stability,
+  aes(
+    x = reorder(vars, mean_test_lift),
+    y = mean_test_lift
+  )
+) +
+  geom_point(size = 3) +
+  geom_errorbar(
+    aes(
+      ymin = mean_test_lift - sd_test_lift,
+      ymax = mean_test_lift + sd_test_lift
+    ),
+    width = 0.2
+  ) +
+  coord_flip() +
+  labs(
+    title = "Stability of TreeAlert Performance Across Variable Sets",
+    x = "Temporal variable combination",
+    y = "Mean test lift ± SD"
+  ) +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold"))
+
+# ------------------------------------------------------------
+# 3. Flagged Volume vs Performance (Operational Tradeoff)
+# ------------------------------------------------------------
+ggplot(
+  sens,
+  aes(
+    x = test_flagged,
+    y = test_lift,
+    color = factor(minbucket)
+  )
+) +
+  geom_point(alpha = 0.7) +
+  scale_x_continuous(labels = comma) +
+  scale_color_brewer(
+    palette = "Dark2",
+    name = "Min bucket"
+  ) +
+  labs(
+    title = "Operational Tradeoff: Alert Volume vs Test Performance",
+    x = "Flagged periods (test)",
+    y = "Test lift (first ventile)"
+  ) +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold"))
+
+# ------------------------------------------------------------
+# 4. Correlation Matrix of Sensitivity Variables
+# ------------------------------------------------------------
+num_vars <- sens %>%
+  select(
+    cp, minbucket, maxdepth,
+    train_lift, test_lift, full_lift,
+    train_precision, test_precision,
+    train_flagged, test_flagged
+  )
+
+corr_mat <- cor(num_vars, use = "pairwise.complete.obs")
+
+corrplot(
+  corr_mat,
+  method = "color",
+  type = "upper",
+  tl.col = "black",
+  tl.cex = 0.8,
+  addCoef.col = "black",
+  number.cex = 0.6
+)
+
+```
+
+One time Pre-processing - old stuff. Ignore
+```{r, include=FALSE, warning=FALSE, message=FALSE}
+# test_data <- read.csv(
+#   "C:/Users/Kagebi/Documents/Research/TreeAlert and Lift/Power_Lift/ensemble_metrics_timeseries_test.csv"
+# )
+# 
+# train_data <- read.csv(
+#   "C:/Users/Kagebi/Documents/Research/TreeAlert and Lift/Power_Lift/train_aggregation_metrics_timeseries.csv"
+# )
+
+# # fix sci notation
+
+# avoid scientific notation
+# options(scipen = 999)
+
+# function to round quantiles + winkler
+# round_metrics <- function(df, digits = 4) {
+#   q_cols <- grep("^q", names(df), value = TRUE)
+#   cols_to_round <- c(q_cols, "winkler_score")
+# 
+#   df[cols_to_round] <- lapply(
+#     df[cols_to_round],
+#     function(x) round(as.numeric(x), digits)
+#   )
+#   df
+# }
+
+# apply to train and test
+# train_data <- round_metrics(train_data, digits = 4)
+# test_data  <- round_metrics(test_data,  digits = 4)
+## Calc CRPS
+# library(scoringRules)
+# 
+# q_cols <- grep("^q", names(test_data), value = TRUE)
+# 
+# # Calculate CRPS for test_data
+# test_data$crps <- sapply(1:nrow(test_data), function(i) {
+#   quantiles <- as.numeric(test_data[i, q_cols])
+#   actual <- test_data$actual[i]
+#   crps_sample(actual, quantiles)
+# })
+# 
+# # Calculate CRPS for train_data
+# train_data$crps <- sapply(1:nrow(train_data), function(i) {
+#   quantiles <- as.numeric(train_data[i, q_cols])
+#   actual <- train_data$actual[i]
+#   crps_sample(actual, quantiles)
+# })
+# 
+# # Round to 4 decimal places
+# test_data$crps <- round(test_data$crps, 4)
+# train_data$crps <- round(train_data$crps, 4)
+
+##Save as RData files
+# save(train_data, file = "train_r_v2.RData")
+# save(test_data, file = "test_r_v2.RData")
+
+# library(data.table)
+# 
+# # Use normalizePath to handle Windows backslash issues automatically
+# base_path <- "C:/Users/Kagebi/Documents/Research/TreeAlert and Lift/solar_wind/"
+# 
+# # Load files explicitly
+# load(file.path(base_path, "train_r_v2.RData"), verbose = TRUE)
+# load(file.path(base_path, "test_r_v2.RData"), verbose = TRUE)
+# 
+# # remove extra data in train and save as 2 train files
+# 
+# 
+# # 1. Convert train_data to a data.table in-place
+# setDT(train_data)
+# 
+# # 2. Convert valid_datetime to POSIXct for accurate date comparison
+# # This handles the "YYYY-MM-DD HH:MM:SS" format seen in your images
+# train_data[, valid_datetime := as.POSIXct(valid_datetime, format = "%Y-%m-%d %H:%M:%S")]
+# 
+# # 3. Define the cutoff and filter
+# # Removes all rows >= 2/1/2023 0:00
+# cutoff_date <- as.POSIXct("2023-02-01 00:00:00")
+# train_data <- train_data[valid_datetime < cutoff_date]
+# 
+# # 4.1 Split based on the 'type' column
+# train_wind  <- train_data[type == "wind"]
+# train_solar <- train_data[type == "solar"]
+# 
+# # 5. Define your path and save as separate RData files
+# path <- "C:/Users/Kagebi/Documents/Research/TreeAlert and Lift/solar_wind/"
+# 
+# save(train_wind, file = paste0(path, "train_wind_v2.RData"))
+# save(train_solar, file = paste0(path, "train_solar_v2.RData"))
+# 
+# # Quick verification
+# print(nrow(train_wind))
+# print(nrow(train_solar))
+# 
+# # Split the test data
+# 
+# setDT(test_data)
+# # 4.2 Split based on the 'type' column
+# test_wind  <- test_data[type == "wind"]
+# test_solar <- test_data[type == "solar"]
+# 
+# save(test_wind, file = paste0(path, "test_wind_v2.RData"))
+# save(test_solar, file = paste0(path, "test_solar_v2.RData"))
+
+# 
+# ## new data 
+# library(data.table)
+# 
+# # 1. Ensure both are data.tables
+# setDT(train_wind)
+# setDT(test_wind)
+# 
+# # 2. Rename 'case' to 'split' in test_wind if it hasn't been done yet
+# if ("case" %in% names(test_wind)) {
+#   setnames(test_wind, "case", "split")
+# }
+# 
+# # 3. Standardize valid_datetime
+# # Convert test_wind (character) to POSIXct to match train_wind (POSIXct)
+# if (is.character(test_wind$valid_datetime)) {
+#   test_wind[, valid_datetime := as.POSIXct(valid_datetime, format = "%m/%d/%Y %H:%M")]
+# }
+# 
+# # 4. Remove scientific notation and round numeric columns
+# options(scipen = 999)
+# num_cols <- names(train_wind)[sapply(train_wind, is.numeric)]
+# 
+# train_wind[, (num_cols) := lapply(.SD, function(x) round(x, 4)), .SDcols = num_cols]
+# test_wind[, (num_cols) := lapply(.SD, function(x) round(x, 4)), .SDcols = num_cols]
+# 
+# # 5. Merge - stacking test at the end of train
+# all_wind_data <- rbind(train_wind, test_wind, use.names = TRUE)
+# 
+# # 6. Save to raw_data folder
+# save_path <- "C:/Users/Kagebi/Documents/Research/TreeAlert and Lift/raw_data/"
+# if (!dir.exists(save_path)) dir.create(save_path, recursive = TRUE)
+# 
+# save(all_wind_data, file = file.path(save_path, "all_wind_merged.RData"))
+# 
+# # 7. Final Verification
+# print("Merge complete. Summary of valid_datetime:")
+# #summary(all_wind_data$valid_datetime)
+# 
+# ##  Create the Mean Forecast Column
+# # 1. Ensure it's a data.table
+# setDT(all_wind_data)
+# 
+# # 2. Create the 'forecast' column directly (Mean of all columns starting with 'q')
+# # We use .SDcols to select all quantile columns dynamically
+# q_cols <- grep("^q", names(all_wind_data), value = TRUE)
+# all_wind_data[, forecast := rowMeans(.SD, na.rm = TRUE), .SDcols = q_cols]
+```
+
+

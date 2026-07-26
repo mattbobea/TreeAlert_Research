@@ -1,0 +1,172 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%
+%%	Author Submission Template for INFORMS Journal on Data Science (IJDS)
+%%	INFORMS, <informs@informs.org>
+%%	Ver. 1.00, June 2024
+%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% Use dblanonrev for Double Anonymous Review submission
+% Use sglanonrev for Single Anonymous Review submission
+% For example, submission to Operations Research, OPRE will have
+% \documentclass[opre,dblanonrev]{informs4}
+%
+% \documentclass[ijds,sglanonrev]{informs4}
+\documentclass[ijds,dblanonrev]{informs4}
+\usepackage{eqndefns-left} % For checking the display equation width and equation environment definitions %
+\RequirePackage{tgtermes}
+\RequirePackage{newtxtext}
+\RequirePackage{newtxmath}
+\RequirePackage{bm}
+\RequirePackage{endnotes}
+
+%\OneAndAHalfSpacedXI
+\OneAndAHalfSpacedXII % Current default line spacing
+%%\DoubleSpacedXI
+%%\DoubleSpacedXII
+
+% Optional LaTeX Packages
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+% Private macros here (check that there is no clash with the style)
+
+% Natbib setup for author-number style
+\usepackage{natbib}
+ \bibpunct[, ]{(}{)}{,}{a}{}{,}%
+ \def\bibfont{\small}%
+ \def\bibsep{\smallskipamount}%
+ \def\bibhang{24pt}%
+ \def\newblock{\ }%
+ \def\BIBand{and}%
+
+% Additional packages (kept from original manuscript)
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+\usepackage{booktabs}
+\usepackage{threeparttable}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{placeins}
+\usepackage[table,xcdraw]{xcolor}
+\usepackage{caption}
+\captionsetup[table]{position=bottom,format=plain,
+justification=centering,singlelinecheck=false,skip=6pt}
+\captionsetup[figure]{skip=4pt} % reduces space between figure and caption
+
+\setlength{\textfloatsep}{4pt plus 1pt minus 1pt}
+\setlength{\floatsep}{4pt plus 1pt minus 1pt}
+\setlength{\intextsep}{4pt plus 1pt minus 1pt}
+\setlength{\abovecaptionskip}{2pt}
+\setlength{\belowcaptionskip}{0pt}
+
+\newtheorem{principle}{Principle}
+\newenvironment{scenario}[1]{%
+  \par\vspace{1ex}\noindent\textbf{#1}\par\vspace{0.5ex}}{\par}
+
+%% Setup of the equation numbering system. Outcomment only one.
+%% Preferred default is the first option.
+\EquationsNumberedThrough    % Default: (1), (2), ...
+
+\TheoremsNumberedThrough     % Preferred (Theorem 1, Lemma 1, Theorem 2)
+\ECRepeatTheorems  %  
+
+% For new submissions, leave this number blank.
+% For revisions, input the manuscript number assigned by the on-line
+% system along with a suffix ".Rx" where x is the revision number.
+\MANUSCRIPTNO{IJDS-0001-2024.00}
+
+%%%%%%%%%%%%%%%%
+\begin{document}
+%%%%%%%%%%%%%%%%
+
+% Outcomment only when entries are known. Otherwise leave as is and
+%   default values will be used.
+%\setcounter{page}{1}
+%\VOLUME{00}%
+%\NO{0}%
+%\MONTH{Xxxxx}% (month or a similar seasonal id)
+%\YEAR{0000}% e.g., 2005
+%\FIRSTPAGE{000}%
+%\LASTPAGE{000}%
+%\SHORTYEAR{00}% shortened year (two-digit)
+%\ISSUE{0000} %
+%\LONGFIRSTPAGE{0001} %
+%\DOI{10.1287/xxxx.0000.0000}%
+
+% Author's names for the running heads
+% Sample depending on the number of authors;
+% \RUNAUTHOR{Jones}
+% \RUNAUTHOR{Jones and Wilson}
+% \RUNAUTHOR{Jones, Miller, and Wilson}
+% \RUNAUTHOR{Jones et al.} % for four or more authors
+% Enter authors following the given pattern:
+%\RUNAUTHOR{}
+\RUNAUTHOR{Bobea et al.}
+
+\RUNTITLE{TreeAlert: A Method for Predicting Extreme Forecasting Failures}
+
+% Enter the full title:
+\TITLE{When Will Your Model Fail?\\TreeAlert: A Method for Predicting Extreme Forecasting Failures}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Appendix
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{APPENDIX}{Focusing on Both Over-forecasting and Under-forecasting: Alternative Rule Extraction and Filtering}
+\label{append-A}
+
+When domain considerations prioritize predicting both extreme over- and under-forecast failure patterns, TreeAlert can be set to retain both positive and negative mean error rules rather than the most extreme absolute mean errors. 
+This section supplements Section~\ref{sec:rule-extraction} (Rule Extraction and Filtering) and Section~3.5 (Rule Visualization) by illustrating a variant of the Rule Extraction and Filtering step. 
+
+In the electricity demand example, choosing the top-$k$ terminal nodes by absolute mean error resulted in only under-forecast patterns due to their mean magnitudes being most dominant. To reveal over-forecast patterns as well, we partition terminal nodes by the sign of their mean error and then rank separately within each partition. Formally, let $\bar e_j$ denote the mean error for terminal-node $j$. Define $P=\{j:\bar e_j>0\}$, where $P$ is the set of all rules that represent \textit{under-forecasting} patterns (positive mean error), and $N=\{j:\bar e_j<0\}$, where $N$ is the set of all rules that represent \textit{over-forecasting} patterns (negative mean error). Order $P$ in descending $\bar e_j$ and $N$ in ascending $\bar e_j$. Retain the top $k_1$ nodes from $P$ and the top $k_2$ nodes from $N$ to form the final rule set:
+\begin{equation}
+\mathcal{R} = \{\, r_j \;|\; j \in P_{k_1} \cup N_{k_2} \,\},
+\end{equation}
+where $r_j$ denotes the decision rule associated with terminal node $j$, and $P_{k_1}$ and $N_{k_2}$ are the index sets of the top $k_1$ under-forecasting and top $k_2$ over-forecasting nodes, respectively. In this formulation, the total number of retained rules is $k = k_1 + k_2$. 
+
+This alternative rule filtering method prevents one error direction from monopolizing the top-$k$ list and addresses cases where dips are not flagged because their node means are smaller in magnitude than peaks. However, this adjustment comes at the cost of retaining some rules whose mean errors are less extreme than those in a purely absolute-ranked selection. This may reduce overall rule precision by increasing the likelihood of false positives, as these less extreme terminal nodes are more likely to capture conditions that produce non-extreme errors. Consequently, the decision to apply this variant should weigh the value of balanced directional coverage against the potential reduction in precision.
+
+In the example below, we revisit the electricity demand demonstration, selecting the three nodes with the highest positive average errors and the three with the lowest negative average errors ($k_1 = k_2 = 3$, yielding $k = 6$) while holding all other parameters constant. These six rules are displayed in Table~\ref{tab:treealert_rules} and visualized in Figure~\ref{fig:3x3}.
+
+\vspace{6pt}
+
+\begin{table}[b]
+\caption{Interpreted tree rules for terminal nodes with top three positive and negative mean errors}
+\small
+\centering
+\label{tab:treealert_rules}
+\begin{tabular}{r p{13cm}}
+\hline
+\textbf{Avg.~Error} & \textbf{Rule (Interpreted)} \\
+\hline
+$4621.59$  & The model under forecasts by an average of 4622 when Day of Week is Sunday through Monday, Hour is 5PM–6PM, and Minute is 0–14. \\
+$3757.46$  & The model under forecasts by an average of 3757 when Day of Week is Tuesday through Saturday, Hour is 5PM–7PM, and Minute is 15–44. \\ 
+$3626.57$  & The model under forecasts by an average of 3627 when Day of Week is Sunday through Wednesday, Hour is 2AM and 12AM, and Minute is 15–44. \\
+$-1398.24$ & The model over forecasts by an average of –1398 when Day of Week is Sunday, Hour is 2PM, and Minute is 0–14 and 30–59. \\
+$-606.43$  & The model over forecasts by an average of –606 when Day of Week is Sunday, Hour is 3PM, and Minute is 0–14 and 30–59.\\
+$-534.00$  & The model over forecasts by an average of –534 when Day of Week is Sunday, Hour is 1PM and 4PM, and Minute is 0–14.\\
+\hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \small
+    \caption{Example of TreeAlert retaining both positive and negative mean error rules}
+  \includegraphics[width=0.95\linewidth]{Figures/Elec_3x3_both.png}
+  \label{fig:3x3}
+\end{figure}
+
+\FloatBarrier
+\end{APPENDIX}
+
+%%%%%%%%%%%%%%%%%
+\end{document}
+%%%%%%%%%%%%%%%%%
+
+
+
