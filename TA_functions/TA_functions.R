@@ -9,6 +9,42 @@ color_string <- c(
   "#66CDAA", "#BA55D3", "#00CED1", "#4682B4", "#00FFFF"
 )
 
+add_fitted_points_func <- function(data_list, color_list, shape_values) {
+  layers <- lapply(seq_along(data_list), function(i) {
+    ggplot2::geom_point(
+      data = data_list[[i]],
+      ggplot2::aes(
+        x = Time,
+        y = Value,
+        shape = .resid >= top_5_percent_value | .resid <= bottom_5_percent_value
+      ),
+      size = 2.5,
+      stroke = 1,
+      color = color_list[i]
+    )
+  })
+
+  layers
+}
+
+add_resid_points_func <- function(data_list, color_list, shape_values) {
+  layers <- lapply(seq_along(data_list), function(i) {
+    ggplot2::geom_point(
+      data = data_list[[i]],
+      ggplot2::aes(
+        x = Time,
+        y = .resid,
+        shape = .resid >= top_5_percent_value | .resid <= bottom_5_percent_value
+      ),
+      size = 2.5,
+      stroke = 1,
+      color = color_list[i]
+    )
+  })
+
+  layers
+}
+
 tree_alert_lift_data <- function(df, actual_col, pred_col, n_groups = 20) {
   actual <- abs(df[[actual_col]])
   score <- abs(df[[pred_col]])

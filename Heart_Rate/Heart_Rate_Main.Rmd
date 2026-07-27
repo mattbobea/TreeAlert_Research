@@ -14,13 +14,15 @@ library(tsibble); library(fable); library(fabletools) # Forecasting
 library(dplyr); library(lubridate) # Wrangling
 library(ggplot2); library(ggtext); library(grid); library(gridExtra) # Plotting
 library(slider); library(scales); library(rpart); library(rpart.plot); 
-source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "tree_alert_functions.R"))
+source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "TA_functions.R"))
 # library(caret)
 # ============================================================
 # Load data
-heart_dir <- if (dir.exists("Heart Rate")) "Heart Rate" else "."
-heart_data_1 <- readRDS(file.path(heart_dir, "heart_combined.rds"))
-heart_data_2 <- readRDS(file.path(heart_dir, "heart_new_data.rds"))
+heart_dir <- if (dir.exists("Heart_Rate")) "Heart_Rate" else "."
+heart_image_dir <- file.path(heart_dir, "images")
+dir.create(heart_image_dir, showWarnings = FALSE, recursive = TRUE)
+heart_data_1 <- readRDS(file.path(heart_dir, "HR_data", "heart_combined.rds"))
+heart_data_2 <- readRDS(file.path(heart_dir, "HR_data", "heart_new_data.rds"))
 ```
 # DONT SKIP--> Select analysis.  Choose option 2 if you prefer percentile analysis
 ```{r}
@@ -77,27 +79,6 @@ test_set  <- heart_merged_clean[(split_index + 1):nrow(heart_merged_clean), ]
 ```
 Tree Alert Functions:
 ```{r}
-# To generate geom_point layers for 'All Filters Actual Vs Predicted'
-add_fitted_points_func <- function(data_list, color_list, shape_values) {
-  layers <- lapply(seq_along(data_list), function(i) {
-    geom_point(data = data_list[[i]], 
-               aes(x = Time, y = Value, shape = .resid >= top_5_percent_value | .resid <= bottom_5_percent_value),
-               size = 2.5, stroke = 1, color = color_list[i])
-  })
-  return(layers)
-}
-
-# To generate geom_point layers for 'All Filters Residuals'
-add_resid_points_func <- function(data_list, color_list, shape_values) {
-  layers <- lapply(seq_along(data_list), function(i) {
-    geom_point(data = data_list[[i]], 
-               aes(x = Time, y = .resid, shape = .resid >= top_5_percent_value | 
-                     .resid <= bottom_5_percent_value),
-               size = 2.5, stroke = 1, color = color_list[i])
-  })
-  return(layers)
-}
-
 # Function to create the plot for a specific month
 create_monthly_plot <- function(data, start_date, end_date) {
   plot <- ggplot(data, aes(x = Time)) +
@@ -240,14 +221,14 @@ best_train <- tree_alert_compute_lift(
   lift_label = "First Ventile",
   axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
 )
-ggsave("winkler_lift_train.png", plot = last_plot(), width = 8, height = 6, dpi = 1000)
+ggsave(file.path(heart_image_dir, "winkler_lift_train.png"), plot = last_plot(), width = 8, height = 6, dpi = 1000)
 best_test <- tree_alert_compute_lift(
   test_set, best_tree_model, "Pred_Best", "Best Model (Test)",
   plot = TRUE, n_groups = 20,
   lift_label = "First Ventile",
   axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
 )
-ggsave("winkler_lift_test.png", plot = last_plot(), width = 8, height = 6, dpi = 1000)
+ggsave(file.path(heart_image_dir, "winkler_lift_test.png"), plot = last_plot(), width = 8, height = 6, dpi = 1000)
 ```
 Map rules to observations and  pull top 10 rules
 ```{r}
@@ -410,7 +391,7 @@ two_plots <- grid.arrange(actual_predicted_plot, residual_plot, ncol = 1)
 # Export the plot
 #ggsave("HeartRate.png", 
 #       plot = two_plots, width = 6, height = 4, dpi = 800) 
-ggsave("hr_viz.png", 
+ggsave(file.path(heart_image_dir, "hr_viz.png"), 
        plot = two_plots, width = 6, height = 4.5, dpi = 800)
 ```
 Misc

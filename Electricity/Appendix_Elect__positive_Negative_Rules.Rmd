@@ -22,7 +22,7 @@ library(dplyr); library(lubridate) # For Data Wrangling
 library(ggplot2); library(ggtext); library(grid); library(gridExtra); # Plot
 library(slider)# Plot
 library(scales); library(rpart);  library(rpart.plot);
-source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "tree_alert_functions.R"))
+source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "TA_functions.R"))
 ```
 Define Functions:
 ```{r}
