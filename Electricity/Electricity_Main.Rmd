@@ -89,32 +89,6 @@ process_data <- function(data, time_col, actual_col, forecast_col) {
     na.omit()                        # Remove any NA values
 }
 
-# Function to create the plot for a specific month
-create_monthly_plot <- function(data, start_date, end_date) {
-  plot <- ggplot(data, aes(x = Time)) +
-    geom_line(aes(y = Value, color = "Actual"), show.legend = FALSE) +
-    geom_line(aes(y = model_1, color = "Fitted"), alpha = 0.6, show.legend = FALSE) +
-    # changed to skip rules 1-2 
-    add_fitted_points_func(list_of_dfs[start_row:length(list_of_dfs)], 
-                       color_string[start_row:length(list_of_dfs)], 
-                       c("TRUE" = 1, "FALSE" = 16))
-    #add_fitted_points_func(list_of_dfs, color_string, # make geom_point layers
-    #                                  c("TRUE" = 1, "FALSE" = 16)) + 
-    scale_shape_manual(values = c("TRUE" = 1, "FALSE" = 16)) +
-    scale_color_manual(values = c("Actual" = "#4682B4", "Fitted" = "#FF8C00")) +
-    scale_x_datetime(limits = as.POSIXct(c(start_date, end_date)), 
-                     date_labels = "%m-%d",
-                     #date_breaks = "3 days",
-                     expand = c(0.02, 0.02)) +
-    labs(title = paste(""), x = NULL, y = NULL, color = "Variable") +
-    theme_bw() +
-    theme(legend.position = "none",
-          plot.title = element_markdown(size = 10),
-          plot.title.position = "panel")
-  
-  return(plot)
-}
-
 ```
 Load files from Module 
 ```{r, warning=FALSE}
@@ -361,19 +335,19 @@ best_test_results <- tree_alert_compute_lift(
 )
  ggsave(file.path(elec_image_dir, "Electricity_Lift_Test.png"), plot = last_plot(), width = 8, height = 6, dpi = 1200)
 ```
-Map rules to observations and  pull top 10 rules
+Map rules to observations and pull top-k rules
 ```{r}
-# How many rows of tree rules would you like to use?
-start_row <- 1 # starting row of rule from top_resid_rules
-end_row <- 4   # ending row (should be <= 20). if last chart does not # # Ensure it's a standard data frame
+# Number of top sorted terminal-node rules to retain and plot
+n_rules <- 4
 
-# ------------Pull top 10 rules------------
+# ------------Pull top-k rules------------
 top_rule_selection <- tree_alert_select_rule_resids(
   tree_rules = tree_rules,
-  start_row = start_row,
-  end_row = end_row
+  start_row = 1,
+  end_row = n_rules
 )
 tree_rules <- top_rule_selection$tree_rules
+selected_tree_rules <- top_rule_selection$selected_rules
 # # ------------Pull top rules using tail method (95th percentile)------------
 # tree_rules$.resid <- as.numeric(tree_rules$.resid)
 # 
@@ -396,8 +370,8 @@ tree_rules <- top_rule_selection$tree_rules
 # tree_rules$tail95 <- NULL
 
 
-top_10_resid_list <- top_rule_selection$rule_values # not top 10 now
-last_column_index <- length(top_10_resid_list)
+top_rule_values <- top_rule_selection$rule_values
+last_column_index <- length(top_rule_values)
 ```
 
 # THE PROGRAM -- appllies rules as filter and plot results
@@ -405,10 +379,10 @@ last_column_index <- length(top_10_resid_list)
 
 #------------Filter the rows for each rule for plotting------------
 list_of_dfs <- list() # Create an empty DataFrame to store the results
-for (i in start_row:end_row) {
+for (i in seq_along(top_rule_values)) {
 
-  # Pull the next iterative resid to filter by form the top 10 list
-  current_rule <- as.numeric(top_10_resid_list[[i]])
+  # Pull the next sorted rule value to filter observations for plotting
+  current_rule <- as.numeric(top_rule_values[[i]])
   # round both to common decimal as heart_merged_with_leaf has 1 more decimal place
   precision <- 2  
   # Filter heart_merged_with_leaf
@@ -417,7 +391,7 @@ for (i in start_row:end_row) {
     
   #------------displays the rule text before each plot------------
   # Pull the first row from tree_rules
-  first_row <- tree_rules[i, ]
+  first_row <- selected_tree_rules[i, ]
   # Filter out blank cells
   non_blank_cells <- first_row[first_row != ""]
   # Convert the non-blank cells to a single string using paste

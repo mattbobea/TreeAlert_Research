@@ -45,8 +45,39 @@ add_resid_points_func <- function(data_list, color_list, shape_values) {
   layers
 }
 
-tree_alert_lift_data <- function(df, actual_col, pred_col, n_groups = 20) {
-  actual <- abs(df[[actual_col]])
+create_monthly_plot <- function(data,
+                                start_date,
+                                end_date,
+                                data_list = list_of_dfs,
+                                plot_colors = color_string,
+                                shape_values = c("TRUE" = 1, "FALSE" = 16)) {
+  ggplot2::ggplot(data, ggplot2::aes(x = Time)) +
+    ggplot2::geom_line(ggplot2::aes(y = Value, color = "Actual"), show.legend = FALSE) +
+    ggplot2::geom_line(ggplot2::aes(y = model_1, color = "Fitted"), alpha = 0.6, show.legend = FALSE) +
+    add_fitted_points_func(data_list, plot_colors, shape_values) +
+    ggplot2::scale_shape_manual(values = shape_values) +
+    ggplot2::scale_color_manual(values = c("Actual" = "#4682B4", "Fitted" = "#FF8C00")) +
+    ggplot2::scale_x_datetime(
+      limits = as.POSIXct(c(start_date, end_date)),
+      date_labels = "%m-%d",
+      expand = c(0.02, 0.02)
+    ) +
+    ggplot2::labs(title = paste(""), x = NULL, y = NULL, color = "Variable") +
+    ggplot2::theme_bw() +
+    ggplot2::theme(
+      legend.position = "none",
+      plot.title = ggtext::element_markdown(size = 10),
+      plot.title.position = "panel"
+    )
+}
+
+tree_alert_lift_data <- function(df,
+                                 actual_col,
+                                 pred_col,
+                                 n_groups = 20,
+                                 lift_metric = c("mean_abs", "rmse")) {
+  lift_metric <- match.arg(lift_metric)
+  actual <- df[[actual_col]]
   score <- abs(df[[pred_col]])
 
   ord <- order(score, decreasing = TRUE)
@@ -56,22 +87,33 @@ tree_alert_lift_data <- function(df, actual_col, pred_col, n_groups = 20) {
   group <- ceiling(seq_len(n) / (n / n_groups))
   group[group > n_groups] <- n_groups
 
+  lift_summary <- if (lift_metric == "rmse") {
+    function(error) sqrt(mean(error^2, na.rm = TRUE))
+  } else {
+    function(error) mean(abs(error), na.rm = TRUE)
+  }
+
   df_lift <- data.frame(group = group, error = actual_ord) |>
     dplyr::group_by(group) |>
-    dplyr::summarise(meanError = mean(error, na.rm = TRUE), .groups = "drop")
+    dplyr::summarise(meanError = lift_summary(error), .groups = "drop")
 
   df_lift$percentile <- df_lift$group * (100 / n_groups)
-  df_lift$meanError <- df_lift$meanError / mean(actual_ord, na.rm = TRUE)
+  df_lift$meanError <- df_lift$meanError / lift_summary(actual_ord)
 
   df_lift
 }
 
-tree_alert_compute_lift_numeric <- function(df, actual_col, pred_col, n_groups = 20) {
+tree_alert_compute_lift_numeric <- function(df,
+                                            actual_col,
+                                            pred_col,
+                                            n_groups = 20,
+                                            lift_metric = c("mean_abs", "rmse")) {
   df_lift <- tree_alert_lift_data(
     df = df,
     actual_col = actual_col,
     pred_col = pred_col,
-    n_groups = n_groups
+    n_groups = n_groups,
+    lift_metric = lift_metric
   )
 
   df_lift$meanError[df_lift$group == 1]
@@ -85,12 +127,14 @@ tree_alert_make_lift_chart <- function(df,
                                        x_break_by = 2,
                                        axis_title_size = 20,
                                        axis_text_x_size = 18,
-                                       axis_text_y_size = 20) {
+                                       axis_text_y_size = 20,
+                                       lift_metric = c("mean_abs", "rmse")) {
   df_lift <- tree_alert_lift_data(
     df = df,
     actual_col = actual_col,
     pred_col = pred_col,
-    n_groups = n_groups
+    n_groups = n_groups,
+    lift_metric = lift_metric
   )
 
   g2 <- ggplot2::ggplot(df_lift, ggplot2::aes(x = group, y = meanError)) +
@@ -123,7 +167,8 @@ tree_alert_compute_lift <- function(data,
                                     lift_label = "First Ventile",
                                     axis_title_size = 20,
                                     axis_text_x_size = 18,
-                                    axis_text_y_size = 20) {
+                                    axis_text_y_size = 20,
+                                    lift_metric = c("mean_abs", "rmse")) {
   data_with_pred <- data
   data_with_pred[[pred_col_name]] <- as.numeric(predict(model, newdata = data, type = "vector"))
 
@@ -135,14 +180,16 @@ tree_alert_compute_lift <- function(data,
       n_groups = n_groups,
       axis_title_size = axis_title_size,
       axis_text_x_size = axis_text_x_size,
-      axis_text_y_size = axis_text_y_size
+      axis_text_y_size = axis_text_y_size,
+      lift_metric = lift_metric
     )
   } else {
     tree_alert_compute_lift_numeric(
       df = data_with_pred,
       actual_col = actual_col,
       pred_col = pred_col_name,
-      n_groups = n_groups
+      n_groups = n_groups,
+      lift_metric = lift_metric
     )
   }
 
@@ -160,7 +207,8 @@ tree_alert_grid_search <- function(train_set,
                                    n_groups = 20,
                                    actual_col = ".resid",
                                    pred_col_name = "Pred_Temp",
-                                   cp_digits = NULL) {
+                                   cp_digits = NULL,
+                                   lift_metric = c("mean_abs", "rmse")) {
   evaluate_params <- function(params_row) {
     cp <- params_row$cp
     minbucket <- params_row$minbucket
@@ -184,7 +232,8 @@ tree_alert_grid_search <- function(train_set,
       df = train_df,
       actual_col = actual_col,
       pred_col = pred_col_name,
-      n_groups = n_groups
+      n_groups = n_groups,
+      lift_metric = lift_metric
     )
 
     data.frame(
@@ -250,6 +299,7 @@ tree_alert_select_rule_resids <- function(tree_rules,
 
   list(
     tree_rules = sorted_rules,
+    selected_rules = sorted_rules[start_row:end_row, , drop = FALSE],
     rule_values = as.list(sorted_rules[[resid_col]][start_row:end_row])
   )
 }

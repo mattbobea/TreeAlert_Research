@@ -31,7 +31,7 @@ heart_data_2 <- readRDS(file.path(heart_dir, "HR_data", "heart_new_data.rds"))
 # ============================================================
 
 # Choose analysis target:
-# 1 = original .resid (default)
+# 1 = point-forecast residuals optimized with RMSE lift
 # 2 = winkler_score
 # 3 = crps
 
@@ -54,21 +54,27 @@ heart_merged_clean <- heart_data_1 %>%
   )
 
 if (ANALYSIS_CHOICE == 1) {
-  message("Analysis target: original .resid (no changes)")
+  message("Analysis target: original point-forecast residuals with RMSE lift")
+  analysis_target_label <- "Forecast Error"
+  lift_metric <- "rmse"
 } else if (ANALYSIS_CHOICE == 2) {
-  message("Analysis target: winkler_score → .resid")
+  message("Analysis target: winkler_score -> .resid")
+  analysis_target_label <- "Winkler Score"
+  lift_metric <- "mean_abs"
   heart_merged_clean <- heart_merged_clean %>%
     select(-.resid) %>%
     rename(.resid = winkler_score)
 } else if (ANALYSIS_CHOICE == 3) {
-  message("Analysis target: crps → .resid")
+  message("Analysis target: crps -> .resid")
+  analysis_target_label <- "CRPS"
+  lift_metric <- "mean_abs"
   heart_merged_clean <- heart_merged_clean %>%
     select(-.resid) %>%
     rename(.resid = crps)
 } else {
-  stop("Invalid ANALYSIS_CHOICE. Use 1 (.resid), 2 (winkler), or 3 (crps).")
+  stop("Invalid ANALYSIS_CHOICE. Use 1 (RMSE), 2 (winkler), or 3 (crps).")
 }
-#.resid will be replaces with your choice but keep the same column name! 
+#.resid will be replaced with your choice but keep the same column name!
 
 # ============================================================
 # Train / Test split (85 / 15)
@@ -76,31 +82,6 @@ split_index <- floor(0.85 * nrow(heart_merged_clean))
 
 train_set <- heart_merged_clean[1:split_index, ]
 test_set  <- heart_merged_clean[(split_index + 1):nrow(heart_merged_clean), ]
-```
-Tree Alert Functions:
-```{r}
-# Function to create the plot for a specific month
-create_monthly_plot <- function(data, start_date, end_date) {
-  plot <- ggplot(data, aes(x = Time)) +
-    geom_line(aes(y = Value, color = "Actual"), show.legend = FALSE) +
-    geom_line(aes(y = model_1, color = "Fitted"), alpha = 0.6, show.legend = FALSE) +
-    add_fitted_points_func(list_of_dfs, color_string, # make geom_point layers
-                                      c("TRUE" = 1, "FALSE" = 16)) + 
-    scale_shape_manual(values = c("TRUE" = 1, "FALSE" = 16)) +
-    scale_color_manual(values = c("Actual" = "#4682B4", "Fitted" = "#FF8C00")) +
-    scale_x_datetime(limits = as.POSIXct(c(start_date, end_date)), 
-                     date_labels = "%m-%d",
-                     #date_breaks = "3 days",
-                     expand = c(0.02, 0.02)) +
-    labs(title = paste(""), x = NULL, y = NULL, color = "Variable") +
-    theme_bw() +
-    theme(legend.position = "none",
-          plot.title = element_markdown(size = 10),
-          plot.title.position = "panel")
-  
-  return(plot)
-}
-
 ```
 Train train/test split
 ```{r, warning=FALSE}
@@ -129,12 +110,14 @@ train_results <- tree_alert_compute_lift(
   train_set, tree_model, "Leaf_Node", "Baseline (Train)",
   plot = TRUE, n_groups = 20,
   lift_label = "First Quantile",
+  lift_metric = lift_metric,
   axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
 )
 test_results <- tree_alert_compute_lift(
   test_set, tree_model, "Leaf_Node", "Baseline (Test)",
   plot = TRUE, n_groups = 20,
   lift_label = "First Quantile",
+  lift_metric = lift_metric,
   axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
 )
 ```
@@ -164,7 +147,8 @@ grid_search <- tree_alert_grid_search(
   formula = fixed_formula,
   param_grid = param_grid,
   n_groups = 20,
-  pred_col_name = "Pred_Temp"
+  pred_col_name = "Pred_Temp",
+  lift_metric = lift_metric
 )
 
 # SELECT BEST MODEL
@@ -219,6 +203,7 @@ best_train <- tree_alert_compute_lift(
   train_set, best_tree_model, "Pred_Best", "Best Model (Train)",
   plot = TRUE, n_groups = 20,
   lift_label = "First Ventile",
+  lift_metric = lift_metric,
   axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
 )
 ggsave(file.path(heart_image_dir, "winkler_lift_train.png"), plot = last_plot(), width = 8, height = 6, dpi = 1000)
@@ -226,38 +211,53 @@ best_test <- tree_alert_compute_lift(
   test_set, best_tree_model, "Pred_Best", "Best Model (Test)",
   plot = TRUE, n_groups = 20,
   lift_label = "First Ventile",
+  lift_metric = lift_metric,
   axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
 )
 ggsave(file.path(heart_image_dir, "winkler_lift_test.png"), plot = last_plot(), width = 8, height = 6, dpi = 1000)
 ```
-Map rules to observations and  pull top 10 rules
+Map rules to observations and pull top-k rules
 ```{r}
-start_row <- 1
-end_row   <- 3
+n_rules <- 3
 
-# ------------Pull top rules by leaf node value------------
-top_leaf_selection <- tree_alert_top_leaf_values(
-  data = heart_merged_with_leaf,
-  n_rules = end_row,
-  train_end_time = min(test_set$Time)
+# ------------Pull top sorted terminal-node rules------------
+top_rule_selection <- tree_alert_select_rule_resids(
+  tree_rules = tree_rules,
+  start_row = 1,
+  end_row = n_rules
 )
-leaf_summary <- top_leaf_selection$leaf_summary
-top_k_leaf_values <- top_leaf_selection$top_leaf_values
+tree_rules <- top_rule_selection$tree_rules
+selected_tree_rules <- top_rule_selection$selected_rules
+top_rule_values <- top_rule_selection$rule_values
 ```
 
 # THE PROGRAM -- appllies rules as filter and plots the results
 ```{r, warning=FALSE, message=FALSE}
 #------------Filter the rows for each rule for plotting------------
 list_of_dfs <- list() # Create an empty DataFrame to store the results
-for (i in start_row:end_row) {
+rule_coverage <- data.frame()
+for (i in seq_along(top_rule_values)) {
 
+  # Pull the next sorted rule value to filter observations for plotting
+  current_rule <- as.numeric(top_rule_values[[i]])
+  # round both to common decimal as heart_merged_with_leaf has more precision
+  precision <- 2
+  # Filter heart_merged_with_leaf
   filtered_data <- heart_merged_with_leaf %>%
     as.data.frame() %>%
-    filter(Leaf_Node == top_k_leaf_values[i])
+    filter(round(Leaf_Node, precision) == round(current_rule, precision))
   
-  # Find the rule row that matches the leaf node value
-  rule_row_index <- which.min(abs(as.numeric(tree_rules[, 1]) - top_k_leaf_values[i]))  # <-- fix
-  first_row <- tree_rules[rule_row_index, ]                                              # <-- fix
+  rule_coverage <- bind_rows(
+    rule_coverage,
+    data.frame(
+      rule = i,
+      train_points = sum(filtered_data$Time < min(test_set$Time, na.rm = TRUE)),
+      test_points = sum(filtered_data$Time >= min(test_set$Time, na.rm = TRUE)),
+      total_points = nrow(filtered_data)
+    )
+  )
+  
+  first_row <- selected_tree_rules[i, ]
   
   non_blank_cells <- first_row[first_row != ""]
   constructed_sentence <- paste(names(non_blank_cells), non_blank_cells, collapse = " ")
@@ -270,9 +270,8 @@ for (i in start_row:end_row) {
     geom_point(aes(color = .resid > 10)) +
     geom_text(aes(label = format(Time, "%H:%M")), 
               hjust = -0.1, vjust = 0.5, size = 2) +  # Adding time labels
-    labs(title = "Scatter Plot of Residuals", x = "Time", y = "Residual") +
-      scale_color_manual(values = c("FALSE" = "#FF0000", "TRUE" = "#9400D3")) +
-    scale_shape_manual(values = c("TRUE" = 1, "FALSE" = 2)) 
+  labs(title = paste("Scatter Plot of", analysis_target_label), x = "Time", y = analysis_target_label) +
+      scale_color_manual(values = c("FALSE" = "#FF0000", "TRUE" = "#9400D3"))
   #------------Create Residual Plot------------
   #Initiate arguments
   #shape_number <- ifelse(row <= 25, row, 20)
@@ -290,7 +289,7 @@ for (i in start_row:end_row) {
     scale_color_manual(values = c("FALSE" = color_string[i], 
                                   "TRUE" = color_string[i])) +  
     scale_shape_manual(values = c("TRUE" = 1, "FALSE" = 16)) +
-    labs(title = paste("Residual Plot with Tree Filtered Extreme and Non-extreme Values",
+    labs(title = paste(analysis_target_label, "Plot with Tree Filtered Extreme and Non-extreme Values",
                        sep=""), x = NULL, y = NULL) +
     geom_vline(xintercept = min(test_set$Time, na.rm = TRUE), color = "red", linetype = "dashed") +
     theme_bw() +
@@ -318,10 +317,12 @@ for (i in start_row:end_row) {
     theme(plot.title = element_markdown())
 
    # Output plots
-    grid.arrange(rule_text, post_rules_scatter_plot, ncol = 1)
-    grid.arrange(post_rules_line_plot, actual_predicted_plot,
-                 ncol = 1, heights = c(10,10))
+    print(grid.arrange(rule_text, post_rules_scatter_plot, ncol = 1))
+    print(grid.arrange(post_rules_line_plot, actual_predicted_plot,
+                 ncol = 1, heights = c(10,10)))
 }
+
+print(rule_coverage)
 ```
 
 ```{r, warning=FALSE, message=FALSE}
@@ -379,8 +380,7 @@ residual_plot <- ggplot(heart_merged_clean_filled, aes(x = Time)) +
                                       c("TRUE" = 1, "FALSE" = 16)) + 
   scale_shape_manual(values = c("TRUE" = 1, "FALSE" = 1)) +
   scale_color_manual(values = c("Actual" = "#00BFC4")) +
-  # Change Title to from errors to Winkler Score / ect when option 2 is selected
-  labs(title = "Errors", x = NULL, y = NULL, color = "Variable") +   
+  labs(title = analysis_target_label, x = NULL, y = NULL, color = "Variable") +   
   geom_vline(xintercept = min(test_set$Time, na.rm = TRUE), color = "red", 
              linetype = "dotted", size = 1) + theme_bw() +
   theme(legend.position = "none") + 
