@@ -490,6 +490,336 @@ tree_alert_performance_summary <- function(list_of_dfs,
   )
 }
 
+tree_alert_split_sensitivity_analysis <- function(data,
+                                                  formula,
+                                                  param_grid,
+                                                  current_test_size = NULL,
+                                                  n_groups = 20,
+                                                  actual_col = ".resid",
+                                                  pred_col_name = "Pred_Split_Sensitivity",
+                                                  lift_metric = c("mean_abs", "rmse"),
+                                                  train_share_min = 70,
+                                                  train_share_max = 90,
+                                                  train_share_step = 1,
+                                                  reference_train_lift = NULL,
+                                                  reference_test_lift = NULL,
+                                                  train_image_path = NULL,
+                                                  test_image_path = NULL,
+                                                  width = 7,
+                                                  height = 4.2,
+                                                  dpi = 1000) {
+  lift_metric <- match.arg(lift_metric)
+
+  split_data <- as.data.frame(data)
+  if ("Time" %in% names(split_data)) {
+    split_data <- split_data[order(split_data$Time), ]
+  }
+
+  n_obs <- nrow(split_data)
+  if (train_share_min <= 0 || train_share_max >= 100) {
+    stop("train_share_min and train_share_max must be between 0 and 100.")
+  }
+  if (train_share_min > train_share_max) {
+    stop("train_share_min must be less than or equal to train_share_max.")
+  }
+
+  target_train_shares <- seq(train_share_min, train_share_max, by = train_share_step)
+
+  split_grid <- data.frame(
+    target_train_share = target_train_shares,
+    split_index = floor(target_train_shares / 100 * n_obs)
+  )
+  split_grid <- split_grid |>
+    dplyr::filter(split_index > 1, split_index < n_obs) |>
+    dplyr::arrange(split_index) |>
+    dplyr::distinct(split_index, .keep_all = TRUE)
+
+  split_results <- do.call(
+    rbind,
+    lapply(seq_len(nrow(split_grid)), function(i) {
+      split_index <- split_grid$split_index[i]
+      split_train <- split_data[seq_len(split_index), , drop = FALSE]
+      split_test <- split_data[(split_index + 1):n_obs, , drop = FALSE]
+
+      grid_search <- tree_alert_grid_search(
+        train_set = split_train,
+        formula = formula,
+        param_grid = param_grid,
+        n_groups = n_groups,
+        pred_col_name = pred_col_name,
+        lift_metric = lift_metric
+      )
+
+      split_model <- tree_alert_train_best_model(
+        train_set = split_train,
+        formula = formula,
+        best_params = grid_search$best_params
+      )
+
+      split_train[[pred_col_name]] <- as.numeric(
+        predict(split_model, newdata = split_train, type = "vector")
+      )
+      split_test[[pred_col_name]] <- as.numeric(
+        predict(split_model, newdata = split_test, type = "vector")
+      )
+
+      data.frame(
+        train_share = 100 * split_index / n_obs,
+        train_periods = nrow(split_train),
+        test_periods = nrow(split_test),
+        cp = grid_search$best_params$cp,
+        minbucket = grid_search$best_params$minbucket,
+        maxdepth = grid_search$best_params$maxdepth,
+        train_lift = tree_alert_compute_lift_numeric(
+          df = split_train,
+          actual_col = actual_col,
+          pred_col = pred_col_name,
+          n_groups = n_groups,
+          lift_metric = lift_metric
+        ),
+        test_lift = tree_alert_compute_lift_numeric(
+          df = split_test,
+          actual_col = actual_col,
+          pred_col = pred_col_name,
+          n_groups = n_groups,
+          lift_metric = lift_metric
+        )
+      )
+    })
+  )
+
+  make_split_plot <- function(y_col, y_label, reference_lift = NULL) {
+    split_plot <- ggplot2::ggplot(
+      split_results,
+      ggplot2::aes(x = train_share, y = .data[[y_col]])
+    ) +
+      ggplot2::geom_line(color = "grey30", linewidth = 0.45) +
+      ggplot2::geom_point(shape = 21, size = 2.2, fill = "grey92", color = "grey20") +
+      ggplot2::scale_x_continuous(
+        breaks = unique(round(split_results$train_share, 1)),
+        labels = function(x) paste0(round(x, 1), "%")
+      ) +
+      ggplot2::labs(
+        x = "Training Share",
+        y = y_label
+      ) +
+      ggplot2::theme_bw(base_size = 11) +
+      ggplot2::theme(
+        panel.grid.minor = ggplot2::element_blank(),
+        axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)
+      )
+
+    if (!is.null(reference_lift)) {
+      split_plot <- split_plot +
+        ggplot2::geom_hline(
+          yintercept = reference_lift,
+          linetype = "dashed",
+          color = "#B2182B",
+          size = 0.45
+        )
+    }
+
+    split_plot
+  }
+
+  train_plot <- make_split_plot("train_lift", "Training Lift", reference_train_lift)
+  test_plot <- make_split_plot("test_lift", "Test Lift", reference_test_lift)
+
+  if (!is.null(train_image_path)) {
+    ggplot2::ggsave(
+      train_image_path,
+      plot = train_plot,
+      width = width,
+      height = height,
+      dpi = dpi
+    )
+  }
+
+  if (!is.null(test_image_path)) {
+    ggplot2::ggsave(
+      test_image_path,
+      plot = test_plot,
+      width = width,
+      height = height,
+      dpi = dpi
+    )
+  }
+
+  list(
+    results = split_results,
+    train_plot = train_plot,
+    test_plot = test_plot
+  )
+}
+
+tree_alert_feature_sensitivity_analysis <- function(train_set,
+                                                    test_set,
+                                                    feature_formulas,
+                                                    param_grid,
+                                                    n_groups = 20,
+                                                    actual_col = ".resid",
+                                                    pred_col_name = "Pred_Feature_Sensitivity",
+                                                    lift_metric = c("mean_abs", "rmse"),
+                                                    reference_train_lift = NULL,
+                                                    reference_test_lift = NULL,
+                                                    image_path = NULL,
+                                                    width = 7,
+                                                    height = 4.2,
+                                                    dpi = 1000) {
+  lift_metric <- match.arg(lift_metric)
+
+  if (is.null(names(feature_formulas)) || any(names(feature_formulas) == "")) {
+    names(feature_formulas) <- paste("Specification", seq_along(feature_formulas))
+  }
+
+  feature_results <- do.call(
+    rbind,
+    lapply(seq_along(feature_formulas), function(i) {
+      feature_label <- names(feature_formulas)[i]
+      feature_formula <- feature_formulas[[i]]
+
+      grid_search <- tree_alert_grid_search(
+        train_set = train_set,
+        formula = feature_formula,
+        param_grid = param_grid,
+        n_groups = n_groups,
+        pred_col_name = pred_col_name,
+        lift_metric = lift_metric
+      )
+
+      feature_model <- tree_alert_train_best_model(
+        train_set = train_set,
+        formula = feature_formula,
+        best_params = grid_search$best_params
+      )
+
+      feature_train <- train_set
+      feature_train[[pred_col_name]] <- as.numeric(
+        predict(feature_model, newdata = train_set, type = "vector")
+      )
+
+      feature_test <- test_set
+      feature_test[[pred_col_name]] <- as.numeric(
+        predict(feature_model, newdata = test_set, type = "vector")
+      )
+
+      data.frame(
+        specification = feature_label,
+        formula = paste(deparse(feature_formula), collapse = " "),
+        cp = grid_search$best_params$cp,
+        minbucket = grid_search$best_params$minbucket,
+        maxdepth = grid_search$best_params$maxdepth,
+        train_lift = tree_alert_compute_lift_numeric(
+          df = feature_train,
+          actual_col = actual_col,
+          pred_col = pred_col_name,
+          n_groups = n_groups,
+          lift_metric = lift_metric
+        ),
+        test_lift = tree_alert_compute_lift_numeric(
+          df = feature_test,
+          actual_col = actual_col,
+          pred_col = pred_col_name,
+          n_groups = n_groups,
+          lift_metric = lift_metric
+        )
+      )
+    })
+  )
+
+  feature_results$specification <- factor(
+    feature_results$specification,
+    levels = rev(names(feature_formulas))
+  )
+
+  feature_plot_data <- feature_results |>
+    tidyr::pivot_longer(
+      cols = c(train_lift, test_lift),
+      names_to = "set",
+      values_to = "lift"
+    ) |>
+    dplyr::mutate(
+      set = factor(
+        set,
+        levels = c("train_lift", "test_lift"),
+        labels = c("Training", "Test")
+      )
+    )
+
+  feature_plot <- ggplot2::ggplot(
+    feature_plot_data,
+    ggplot2::aes(x = lift, y = specification, color = set, shape = set)
+  ) +
+    ggplot2::geom_vline(
+      xintercept = 1,
+      linetype = "dotted",
+      color = "grey45",
+      size = 0.4
+    ) +
+    ggplot2::geom_segment(
+      data = feature_results,
+      ggplot2::aes(
+        x = train_lift,
+        xend = test_lift,
+        y = specification,
+        yend = specification
+      ),
+      inherit.aes = FALSE,
+      color = "grey70",
+      size = 0.35
+    ) +
+    ggplot2::geom_point(size = 2.4) +
+    ggplot2::scale_color_manual(values = c("Training" = "grey20", "Test" = "#B2182B")) +
+    ggplot2::scale_shape_manual(values = c("Training" = 16, "Test" = 17)) +
+    ggplot2::labs(
+      x = "First-Ventile Lift",
+      y = "Feature Specification",
+      color = NULL,
+      shape = NULL
+    ) +
+    ggplot2::theme_bw(base_size = 11) +
+    ggplot2::theme(
+      panel.grid.minor = ggplot2::element_blank(),
+      legend.position = "bottom",
+      axis.text.y = ggplot2::element_text(hjust = 1)
+    )
+
+  if (!is.null(reference_train_lift)) {
+    feature_plot <- feature_plot +
+      ggplot2::geom_vline(
+        xintercept = reference_train_lift,
+        linetype = "dashed",
+        color = "grey20",
+        size = 0.35
+      )
+  }
+
+  if (!is.null(reference_test_lift)) {
+    feature_plot <- feature_plot +
+      ggplot2::geom_vline(
+        xintercept = reference_test_lift,
+        linetype = "dashed",
+        color = "#B2182B",
+        size = 0.35
+      )
+  }
+
+  if (!is.null(image_path)) {
+    ggplot2::ggsave(
+      image_path,
+      plot = feature_plot,
+      width = width,
+      height = height,
+      dpi = dpi
+    )
+  }
+
+  list(
+    results = feature_results,
+    plot = feature_plot
+  )
+}
+
 tree_alert_sort_rules_by_resid <- function(tree_rules,
                                            resid_col = ".resid",
                                            decreasing_abs = TRUE) {

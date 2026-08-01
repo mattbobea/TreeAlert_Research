@@ -681,3 +681,55 @@ sensitivity_test_plot <- sensitivity_analysis$test_plot
 sensitivity_train_plot
 sensitivity_test_plot
 ```
+
+Train/Test Split Sensitivity Analysis
+```{r, warning=FALSE, message=FALSE}
+split_sensitivity_analysis <- tree_alert_split_sensitivity_analysis(
+  data = analysis_data,
+  formula = final_formula,
+  param_grid = param_grid,
+  n_groups = n_groups,
+  train_share_min = 70,
+  train_share_max = 90,
+  train_share_step = 1,
+  reference_train_lift = best_train_lift,
+  reference_test_lift = best_test_lift,
+  train_image_path = file.path(elec_image_dir, "elec_split_sensitivity_train_lift.png"),
+  test_image_path = file.path(elec_image_dir, "elec_split_sensitivity_test_lift.png")
+)
+
+split_sensitivity_results <- split_sensitivity_analysis$results
+split_sensitivity_train_plot <- split_sensitivity_analysis$train_plot
+split_sensitivity_test_plot <- split_sensitivity_analysis$test_plot
+split_sensitivity_train_plot
+split_sensitivity_test_plot
+```
+
+Feature Granularity Sensitivity Analysis
+```{r, warning=FALSE, message=FALSE}
+feature_sensitivity_analysis <- tree_alert_feature_sensitivity_analysis(
+  train_set = train_set,
+  test_set = test_set,
+  feature_formulas = list(
+    "Hour" = .resid ~ Hour,
+    "Minute + Hour" = .resid ~ Minute + Hour,
+    "Hour + Weekday" = .resid ~ Hour + Weekday,
+    "Minute + Hour + Weekday" = .resid ~ Minute + Hour + Weekday,
+    "Hour + Month" = .resid ~ Hour + Month,
+    "Minute + Hour + Month" = .resid ~ Minute + Hour + Month,
+    "Hour + Weekday + Month" = .resid ~ Hour + Weekday + Month,
+    "Minute + Hour + Weekday + Month" = .resid ~ Minute + Hour + Weekday + Month
+  ),
+  param_grid = param_grid,
+  n_groups = n_groups,
+  reference_train_lift = best_train_lift,
+  reference_test_lift = best_test_lift,
+  image_path = file.path(elec_image_dir, "elec_feature_sensitivity_lift.png"),
+  height = 4.8
+)
+
+feature_sensitivity_results <- feature_sensitivity_analysis$results
+feature_sensitivity_plot <- feature_sensitivity_analysis$plot
+feature_sensitivity_results
+feature_sensitivity_plot
+```

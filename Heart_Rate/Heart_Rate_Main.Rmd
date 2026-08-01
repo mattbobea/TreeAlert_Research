@@ -426,3 +426,53 @@ sensitivity_test_plot <- sensitivity_analysis$test_plot
 sensitivity_train_plot
 sensitivity_test_plot
 ```
+
+Train/Test Split Sensitivity Analysis
+```{r, warning=FALSE, message=FALSE}
+split_sensitivity_analysis <- tree_alert_split_sensitivity_analysis(
+  data = analysis_data,
+  formula = final_formula,
+  param_grid = param_grid,
+  n_groups = n_groups,
+  lift_metric = lift_metric,
+  train_share_min = 70,
+  train_share_max = 90,
+  train_share_step = 1,
+  reference_train_lift = best_train$lift,
+  reference_test_lift = best_test$lift,
+  train_image_path = file.path(heart_image_dir, "hr_split_sensitivity_train_lift.png"),
+  test_image_path = file.path(heart_image_dir, "hr_split_sensitivity_test_lift.png")
+)
+
+split_sensitivity_results <- split_sensitivity_analysis$results
+split_sensitivity_train_plot <- split_sensitivity_analysis$train_plot
+split_sensitivity_test_plot <- split_sensitivity_analysis$test_plot
+split_sensitivity_train_plot
+split_sensitivity_test_plot
+```
+
+Feature Granularity Sensitivity Analysis
+```{r, warning=FALSE, message=FALSE}
+feature_sensitivity_analysis <- tree_alert_feature_sensitivity_analysis(
+  train_set = train_set,
+  test_set = test_set,
+  feature_formulas = list(
+    "Hour" = .resid ~ Hour,
+    "Minute + Hour" = .resid ~ Minute + Hour,
+    "Hour + Weekday" = .resid ~ Hour + Weekday,
+    "Minute + Hour + Weekday" = .resid ~ Minute + Hour + Weekday
+  ),
+  param_grid = param_grid,
+  n_groups = n_groups,
+  lift_metric = lift_metric,
+  reference_train_lift = best_train$lift,
+  reference_test_lift = best_test$lift,
+  image_path = file.path(heart_image_dir, "hr_feature_sensitivity_lift.png"),
+  height = 4.2
+)
+
+feature_sensitivity_results <- feature_sensitivity_analysis$results
+feature_sensitivity_plot <- feature_sensitivity_analysis$plot
+feature_sensitivity_results
+feature_sensitivity_plot
+```
