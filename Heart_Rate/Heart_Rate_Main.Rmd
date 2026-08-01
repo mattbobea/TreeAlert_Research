@@ -15,32 +15,47 @@ library(dplyr); library(lubridate) # Wrangling
 library(ggplot2); library(ggtext); library(grid); library(gridExtra) # Plotting
 library(slider); library(scales); library(rpart); library(rpart.plot); 
 source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "TA_functions.R"))
+source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "Rephrase_Rule_Func.R"))
 # library(caret)
-# ============================================================
-# Load data
+```
+
+Configuration
+```{r}
+# Choose analysis target:
+# 1 = point-forecast residuals optimized with RMSE lift
+# 2 = winkler_score
+# 3 = crps
+ANALYSIS_CHOICE <- 1
+
+n_groups <- 20
+n_rules <- 3
+minute_increment <- 10
+
+baseline_formula <- .resid ~ Minute + Hour + Weekday + Intensity + Steps_10
+fixed_formula <- .resid ~ Hour + Minute + Weekday + Intensity + Steps_10
+final_formula <- fixed_formula
+
+param_grid <- expand.grid(
+  cp        = c(0, 0.0001, 0.001, 0.005, 0.01),
+  minbucket = seq(4, 8, by = 1),
+  maxdepth  = seq(1, 6, by = 1)
+)
+```
+
+Load Data
+```{r, include=FALSE, warning=FALSE, message=FALSE}
 heart_dir <- if (dir.exists("Heart_Rate")) "Heart_Rate" else "."
 heart_image_dir <- file.path(heart_dir, "images")
 dir.create(heart_image_dir, showWarnings = FALSE, recursive = TRUE)
 heart_data_1 <- readRDS(file.path(heart_dir, "HR_data", "heart_combined.rds"))
 heart_data_2 <- readRDS(file.path(heart_dir, "HR_data", "heart_new_data.rds"))
 ```
-# DONT SKIP--> Select analysis.  Choose option 2 if you prefer percentile analysis
+
+Prepare Data
 ```{r}
-# ============================================================
-# ANALYSIS TARGET SWITCH
-# ============================================================
-
-# Choose analysis target:
-# 1 = point-forecast residuals optimized with RMSE lift
-# 2 = winkler_score
-# 3 = crps
-
-ANALYSIS_CHOICE <- 2
-
-#--------------------------
 # Merge metrics from heart_data_2 into heart_data_1
 
-heart_merged_clean <- heart_data_1 %>%
+analysis_data <- heart_data_1 %>%
   left_join(
     heart_data_2 %>%
       select(
@@ -61,14 +76,14 @@ if (ANALYSIS_CHOICE == 1) {
   message("Analysis target: winkler_score -> .resid")
   analysis_target_label <- "Winkler Score"
   lift_metric <- "mean_abs"
-  heart_merged_clean <- heart_merged_clean %>%
+  analysis_data <- analysis_data %>%
     select(-.resid) %>%
     rename(.resid = winkler_score)
 } else if (ANALYSIS_CHOICE == 3) {
   message("Analysis target: crps -> .resid")
   analysis_target_label <- "CRPS"
   lift_metric <- "mean_abs"
-  heart_merged_clean <- heart_merged_clean %>%
+  analysis_data <- analysis_data %>%
     select(-.resid) %>%
     rename(.resid = crps)
 } else {
@@ -78,12 +93,12 @@ if (ANALYSIS_CHOICE == 1) {
 
 # ============================================================
 # Train / Test split (85 / 15)
-split_index <- floor(0.85 * nrow(heart_merged_clean))
+split_index <- floor(0.85 * nrow(analysis_data))
 
-train_set <- heart_merged_clean[1:split_index, ]
-test_set  <- heart_merged_clean[(split_index + 1):nrow(heart_merged_clean), ]
+train_set <- analysis_data[1:split_index, ]
+test_set  <- analysis_data[(split_index + 1):nrow(analysis_data), ]
 ```
-Train train/test split
+Train/Test Split
 ```{r, warning=FALSE}
 #------------Calculate Theta - Top / bottom 5% of data ------------
 top_5_percent <- quantile(train_set$.resid, probs = 0.95, na.rm = TRUE)
@@ -92,37 +107,38 @@ top_5_percent_value <- top_5_percent[[1]]
 bottom_5_percent_value <- bottom_5_percent[[1]]
 top_5_percent_value ; bottom_5_percent_value 
 ```
-# Regression Tree
+
+Baseline Tree
 ```{r}
 #------------Regression tree on .resid + temporal variables------------ 
-tree_model <- rpart(.resid ~ Minute + Hour + Weekday + Intensity + Steps_10, 
+tree_model <- rpart(baseline_formula, 
                     data = train_set, method = "anova", 
                     cp = 0.00000, minbucket = 10)
 tree_rules <- rpart.rules(tree_model, cover = FALSE, digits = 4, nn = FALSE)
 #Attached the predicted tree nodes to DF and Maps rules/leafs to Observations
 
-leaf_nodes <- predict(tree_model, newdata = heart_merged_clean, type = "vector") 
-heart_merged_with_leaf <- dplyr::bind_cols(heart_merged_clean, Leaf_Node = leaf_nodes)
+leaf_nodes <- predict(tree_model, newdata = analysis_data, type = "vector") 
+analysis_data_with_leaf <- dplyr::bind_cols(analysis_data, Leaf_Node = leaf_nodes)
 ```
-Lift 
+Lift Charts
 ```{r}
 train_results <- tree_alert_compute_lift(
   train_set, tree_model, "Leaf_Node", "Baseline (Train)",
-  plot = TRUE, n_groups = 20,
+  plot = TRUE, n_groups = n_groups,
   lift_label = "First Quantile",
   lift_metric = lift_metric,
   axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
 )
 test_results <- tree_alert_compute_lift(
   test_set, tree_model, "Leaf_Node", "Baseline (Test)",
-  plot = TRUE, n_groups = 20,
+  plot = TRUE, n_groups = n_groups,
   lift_label = "First Quantile",
   lift_metric = lift_metric,
   axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
 )
 ```
 
-## Grid Search: Joint Optimization of Tree Parameters + Predictor Variables  ##
+Grid Search
 ```{r}
 ## ============================================================================
 ## GRID SEARCH: Optimize Tree Parameters ONLY
@@ -131,22 +147,12 @@ test_results <- tree_alert_compute_lift(
 ## Using SAME Lift Metric
 ## ============================================================================
 
-# 1. Fixed formula (NO variable combinations)
-fixed_formula <- .resid ~ Hour + Minute + Weekday + Intensity + Steps_10
-
-# 2. Parameter grid (ONLY tuning tree hyperparameters)
-param_grid <- expand.grid(
-  cp        = c(0, 0.0001, 0.001, 0.005, 0.01),
-  minbucket = c(5, 10, 20, 30),
-  maxdepth  = c(5, 10, 15, 20, 25, 30)
-)
-
 # RUN GRID SEARCH
 grid_search <- tree_alert_grid_search(
   train_set = train_set,
   formula = fixed_formula,
   param_grid = param_grid,
-  n_groups = 20,
+  n_groups = n_groups,
   pred_col_name = "Pred_Temp",
   lift_metric = lift_metric
 )
@@ -160,15 +166,9 @@ cat("  BEST TREE PARAMETERS FOUND\n")
 cat("=============================\n")
 print(best_params)
 ```
-Train Final Model using Best Parameters
+
+Final Model
 ```{r}
-###############################################################################
-## Train Final Model using Best Parameters + Best Variable Combination
-###############################################################################
-
-# Build formula dynamically from best_params$vars
-final_formula <- fixed_formula
-
 cat("  FINAL MODEL FORMULA USED\n")
 print(final_formula)
 
@@ -187,21 +187,21 @@ tree_rules <- rpart.rules(best_tree_model, cover = FALSE, digits = 4, nn = FALSE
 #print(tree_rules)
 
 # Attach predicted leaf node averages to full dataset
-leaf_nodes <- predict(best_tree_model, newdata = heart_merged_clean, type = "vector")
-heart_merged_with_leaf <- dplyr::bind_cols(heart_merged_clean, Leaf_Node = leaf_nodes)
+leaf_nodes <- predict(best_tree_model, newdata = analysis_data, type = "vector")
+analysis_data_with_leaf <- dplyr::bind_cols(analysis_data, Leaf_Node = leaf_nodes)
 
 # Preview result
 cat("\n=============================\n")
 cat(" ATTACHED LEAF NODE PREDICTIONS\n")
 cat("=============================\n")
-print(head(heart_merged_with_leaf))
+print(head(analysis_data_with_leaf))
 ```
-# LIFT CHARTS FOR BEST GRID SEARCH MODEL (Train / Test / Full)
+Final Lift Charts
 ```{r}
 # ---- Compute lift for BEST MODEL ----
 best_train <- tree_alert_compute_lift(
   train_set, best_tree_model, "Pred_Best", "Best Model (Train)",
-  plot = TRUE, n_groups = 20,
+  plot = TRUE, n_groups = n_groups,
   lift_label = "First Ventile",
   lift_metric = lift_metric,
   axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
@@ -209,41 +209,42 @@ best_train <- tree_alert_compute_lift(
 ggsave(file.path(heart_image_dir, "winkler_lift_train.png"), plot = last_plot(), width = 8, height = 6, dpi = 1000)
 best_test <- tree_alert_compute_lift(
   test_set, best_tree_model, "Pred_Best", "Best Model (Test)",
-  plot = TRUE, n_groups = 20,
+  plot = TRUE, n_groups = n_groups,
   lift_label = "First Ventile",
   lift_metric = lift_metric,
   axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
 )
 ggsave(file.path(heart_image_dir, "winkler_lift_test.png"), plot = last_plot(), width = 8, height = 6, dpi = 1000)
 ```
-Map rules to observations and pull top-k rules
+Top Rules
 ```{r}
-n_rules <- 3
-
 # ------------Pull top sorted terminal-node rules------------
-top_rule_selection <- tree_alert_select_rule_resids(
+rule_selection <- tree_alert_pull_top_k_rules(
   tree_rules = tree_rules,
-  start_row = 1,
-  end_row = n_rules
+  n_rules = n_rules
 )
-tree_rules <- top_rule_selection$tree_rules
-selected_tree_rules <- top_rule_selection$selected_rules
-top_rule_values <- top_rule_selection$rule_values
+tree_rules <- rule_selection$tree_rules
+selected_rules <- rule_selection$selected_rules
+selected_rule_values <- rule_selection$selected_rule_values
+rule_text_output <- tree_alert_list_top_rules(
+  selected_rules = selected_rules,
+  minute_increment = minute_increment
+)
 ```
 
-# THE PROGRAM -- appllies rules as filter and plots the results
+Rule Plots
 ```{r, warning=FALSE, message=FALSE}
 #------------Filter the rows for each rule for plotting------------
 list_of_dfs <- list() # Create an empty DataFrame to store the results
 rule_coverage <- data.frame()
-for (i in seq_along(top_rule_values)) {
+for (i in seq_along(selected_rule_values)) {
 
   # Pull the next sorted rule value to filter observations for plotting
-  current_rule <- as.numeric(top_rule_values[[i]])
-  # round both to common decimal as heart_merged_with_leaf has more precision
+  current_rule <- as.numeric(selected_rule_values[[i]])
+  # round both to common decimal as analysis_data_with_leaf has more precision
   precision <- 2
-  # Filter heart_merged_with_leaf
-  filtered_data <- heart_merged_with_leaf %>%
+  # Filter analysis_data_with_leaf
+  filtered_data <- analysis_data_with_leaf %>%
     as.data.frame() %>%
     filter(round(Leaf_Node, precision) == round(current_rule, precision))
   
@@ -257,12 +258,8 @@ for (i in seq_along(top_rule_values)) {
     )
   )
   
-  first_row <- selected_tree_rules[i, ]
-  
-  non_blank_cells <- first_row[first_row != ""]
-  constructed_sentence <- paste(names(non_blank_cells), non_blank_cells, collapse = " ")
+  constructed_sentence <- rule_text_output$raw_rules[i]
   rule_text <- textGrob(constructed_sentence, gp = gpar(col = "black", fontsize = 9))
-  print(constructed_sentence)
   
   #------------Plot of filtered rules on fitted time scale------------
   post_rules_scatter_plot <- ggplot(filtered_data, 
@@ -278,7 +275,7 @@ for (i in seq_along(top_rule_values)) {
   random_color <- rgb(runif(1), runif(1), runif(1), maxColorValue = 255)
   list_of_dfs[[i]] <- filtered_data # used to save df's for lower plot.
   # Plot of filtered rules on full series
-  post_rules_line_plot <- ggplot(heart_merged_clean, 
+  post_rules_line_plot <- ggplot(analysis_data, 
                                  aes(x = Time, y = .resid)) +
     geom_line(color = "#00BFC4") +
     geom_point(data = filtered_data, 
@@ -296,7 +293,7 @@ for (i in seq_along(top_rule_values)) {
     theme(legend.position = "none") + 
     theme(plot.title = element_markdown())
     #------------Plot of Actual Vs Predicted------------
-  actual_predicted_plot <- ggplot(heart_merged_clean, aes(x = Time)) +
+  actual_predicted_plot <- ggplot(analysis_data, aes(x = Time)) +
     geom_line(aes(y = Value, color = "Actual"), show.legend = FALSE) +
     geom_point(data = filtered_data, 
                aes(x = Time, y = Value, 
@@ -317,28 +314,31 @@ for (i in seq_along(top_rule_values)) {
     theme(plot.title = element_markdown())
 
    # Output plots
-    print(grid.arrange(rule_text, post_rules_scatter_plot, ncol = 1))
-    print(grid.arrange(post_rules_line_plot, actual_predicted_plot,
+    grid.newpage()
+    grid.draw(arrangeGrob(rule_text, post_rules_scatter_plot, ncol = 1))
+    grid.newpage()
+    grid.draw(arrangeGrob(post_rules_line_plot, actual_predicted_plot,
                  ncol = 1, heights = c(10,10)))
 }
 
 print(rule_coverage)
 ```
 
+All Rules Plots
 ```{r, warning=FALSE, message=FALSE}
 #fills gaps with NA's so that the line does not appear on blanks. 
-heart_merged_clean_filled <- heart_merged_clean %>%
+analysis_data_filled <- analysis_data %>%
   complete(Time = seq(min(Time), max(Time), by = "10 min"))
 # -----------
 # Filter points based on your criteria
-highlight_points <- subset(heart_merged_clean_filled,
+highlight_points <- subset(analysis_data_filled,
              (Hour %in% c("5", "6") & Weekday %in% 
                 c("1", "2", "3", "4", "5")) |  # Weekday early AM
              Weekday %in% c("7") |  # Weekends
              WeekofMonth %in% c("1", "4", "5")) # 1st/4th/5th weeks of the month
 
 # Plot of filtered rules on full series
-post_rules_line_plot <- ggplot(heart_merged_clean_filled, aes(x = Time, y = .resid)) +
+post_rules_line_plot <- ggplot(analysis_data_filled, aes(x = Time, y = .resid)) +
   geom_line(color = "#00BFC4") +
   geom_point(data = highlight_points, 
              aes(x = Time, y = .resid, color = .resid > 10), size = 0.5) +  
@@ -354,7 +354,7 @@ post_rules_line_plot <- ggplot(heart_merged_clean_filled, aes(x = Time, y = .res
 
 #------------All Filters Actual Vs Predicted------------
 # Create the plot
-actual_predicted_plot <- ggplot(heart_merged_clean_filled, aes(x = Time)) +
+actual_predicted_plot <- ggplot(analysis_data_filled, aes(x = Time)) +
   geom_line(aes(y = Value, color = "Actual"),  na.rm = FALSE, show.legend = FALSE) +
   geom_line(aes(y = .fitted, color = "Fitted"), 
             alpha = 0.6, show.legend = FALSE) +
@@ -374,7 +374,7 @@ actual_predicted_plot <- ggplot(heart_merged_clean_filled, aes(x = Time)) +
 actual_predicted_plot
 
 # Create the plot
-residual_plot <- ggplot(heart_merged_clean_filled, aes(x = Time)) +
+residual_plot <- ggplot(analysis_data_filled, aes(x = Time)) +
   geom_line(aes(y = .resid, color = "Actual"),  na.rm = FALSE, show.legend = FALSE) +
   add_resid_points_func(list_of_dfs, color_string, # Generate geom_point layers
                                       c("TRUE" = 1, "FALSE" = 16)) + 
@@ -394,10 +394,35 @@ two_plots <- grid.arrange(actual_predicted_plot, residual_plot, ncol = 1)
 ggsave(file.path(heart_image_dir, "hr_viz.png"), 
        plot = two_plots, width = 6, height = 4.5, dpi = 800)
 ```
-Misc
+Metrics
 ```{r}
-percent_above_10 <- mean(highlight_points$.resid > 10) * 100
-average_resid <- mean(highlight_points$.resid)
-cat("Percentage of values above 10:", percent_above_10, "%\n")
-cat("Average value of .resid column:", average_resid, "\n")
+performance_summary <- tree_alert_performance_summary(
+  list_of_dfs = list_of_dfs,
+  train_set = train_set,
+  test_set = test_set,
+  train_lift = best_train$lift,
+  test_lift = best_test$lift
+)
+```
+
+Sensitivity Analysis
+```{r, warning=FALSE, message=FALSE}
+sensitivity_analysis <- tree_alert_sensitivity_analysis(
+  train_set = train_set,
+  test_set = test_set,
+  formula = final_formula,
+  param_grid = param_grid,
+  n_groups = n_groups,
+  lift_metric = lift_metric,
+  reference_train_lift = best_train$lift,
+  reference_test_lift = best_test$lift,
+  train_image_path = file.path(heart_image_dir, "hr_sensitivity_train_lift.png"),
+  test_image_path = file.path(heart_image_dir, "hr_sensitivity_test_lift.png")
+)
+
+sensitivity_results <- sensitivity_analysis$results
+sensitivity_train_plot <- sensitivity_analysis$train_plot
+sensitivity_test_plot <- sensitivity_analysis$test_plot
+sensitivity_train_plot
+sensitivity_test_plot
 ```

@@ -272,6 +272,224 @@ tree_alert_train_best_model <- function(train_set, formula, best_params) {
   )
 }
 
+tree_alert_sensitivity_analysis <- function(train_set,
+                                            test_set,
+                                            formula,
+                                            param_grid,
+                                            n_groups = 20,
+                                            actual_col = ".resid",
+                                            pred_col_name = "Pred_Sensitivity",
+                                            lift_metric = c("mean_abs", "rmse"),
+                                            reference_train_lift = NULL,
+                                            reference_test_lift = NULL,
+                                            train_image_path = NULL,
+                                            test_image_path = NULL,
+                                            width = 8,
+                                            height = 4.2,
+                                            dpi = 1000) {
+  lift_metric <- match.arg(lift_metric)
+
+  sensitivity_results <- do.call(
+    rbind,
+    lapply(seq_len(nrow(param_grid)), function(i) {
+      params <- param_grid[i, , drop = FALSE]
+
+      sensitivity_model <- rpart::rpart(
+        formula,
+        data = train_set,
+        method = "anova",
+        control = rpart::rpart.control(
+          cp = params$cp,
+          minbucket = params$minbucket,
+          maxdepth = params$maxdepth
+        )
+      )
+
+      sensitivity_train <- train_set
+      sensitivity_train[[pred_col_name]] <- as.numeric(
+        predict(sensitivity_model, newdata = train_set, type = "vector")
+      )
+
+      sensitivity_test <- test_set
+      sensitivity_test[[pred_col_name]] <- as.numeric(
+        predict(sensitivity_model, newdata = test_set, type = "vector")
+      )
+
+      data.frame(
+        cp = params$cp,
+        minbucket = params$minbucket,
+        maxdepth = params$maxdepth,
+        train_lift = tree_alert_compute_lift_numeric(
+          df = sensitivity_train,
+          actual_col = actual_col,
+          pred_col = pred_col_name,
+          n_groups = n_groups,
+          lift_metric = lift_metric
+        ),
+        test_lift = tree_alert_compute_lift_numeric(
+          df = sensitivity_test,
+          actual_col = actual_col,
+          pred_col = pred_col_name,
+          n_groups = n_groups,
+          lift_metric = lift_metric
+        )
+      )
+    })
+  )
+
+  parameter_value_levels <- c(
+    paste("cp", sort(unique(sensitivity_results$cp)), sep = "__"),
+    paste("minbucket", sort(unique(sensitivity_results$minbucket)), sep = "__"),
+    paste("maxdepth", sort(unique(sensitivity_results$maxdepth)), sep = "__")
+  )
+
+  sensitivity_plot_data <- sensitivity_results |>
+    tidyr::pivot_longer(
+      cols = c(cp, minbucket, maxdepth),
+      names_to = "parameter",
+      values_to = "value"
+    ) |>
+    dplyr::mutate(
+      value = factor(
+        paste(parameter, value, sep = "__"),
+        levels = parameter_value_levels
+      ),
+      parameter = factor(
+        parameter,
+        levels = c("cp", "minbucket", "maxdepth"),
+        labels = c("Complexity parameter", "Minimum bucket", "Maximum depth")
+      )
+    )
+
+  make_sensitivity_plot <- function(y_col, y_label, reference_lift = NULL) {
+    sensitivity_plot <- ggplot2::ggplot(
+      sensitivity_plot_data,
+      ggplot2::aes(x = value, y = .data[[y_col]])
+    ) +
+      ggplot2::geom_boxplot(
+        width = 0.65,
+        fill = "grey92",
+        color = "grey20",
+        outlier.shape = 21,
+        outlier.fill = "white",
+        outlier.color = "grey20",
+        outlier.size = 1.8
+      ) +
+      ggplot2::facet_wrap(~ parameter, scales = "free_x", nrow = 1) +
+      ggplot2::scale_x_discrete(labels = function(x) sub("^.*__", "", x)) +
+      ggplot2::labs(
+        x = NULL,
+        y = y_label
+      ) +
+      ggplot2::theme_bw(base_size = 11) +
+      ggplot2::theme(
+        panel.grid.major.x = ggplot2::element_blank(),
+        panel.grid.minor = ggplot2::element_blank(),
+        strip.background = ggplot2::element_rect(fill = "grey85", color = "grey30"),
+        strip.text = ggplot2::element_text(face = "bold"),
+        axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)
+      )
+
+    if (!is.null(reference_lift)) {
+      sensitivity_plot <- sensitivity_plot +
+        ggplot2::geom_hline(
+          yintercept = reference_lift,
+          linetype = "dashed",
+          color = "#B2182B",
+          size = 0.45
+        )
+    }
+
+    sensitivity_plot
+  }
+
+  train_plot <- make_sensitivity_plot("train_lift", "Training Lift", reference_train_lift)
+  test_plot <- make_sensitivity_plot("test_lift", "Test Lift", reference_test_lift)
+
+  if (!is.null(train_image_path)) {
+    ggplot2::ggsave(
+      train_image_path,
+      plot = train_plot,
+      width = width,
+      height = height,
+      dpi = dpi
+    )
+  }
+
+  if (!is.null(test_image_path)) {
+    ggplot2::ggsave(
+      test_image_path,
+      plot = test_plot,
+      width = width,
+      height = height,
+      dpi = dpi
+    )
+  }
+
+  list(
+    results = sensitivity_results,
+    train_plot = train_plot,
+    test_plot = test_plot
+  )
+}
+
+tree_alert_performance_summary <- function(list_of_dfs,
+                                           train_set,
+                                           test_set,
+                                           train_lift,
+                                           test_lift,
+                                           print_output = TRUE) {
+  flagged_data <- dplyr::bind_rows(list_of_dfs) |>
+    dplyr::distinct(Time, .keep_all = TRUE)
+
+  train_flagged <- flagged_data |>
+    dplyr::filter(Time %in% train_set$Time) |>
+    nrow()
+
+  test_flagged <- flagged_data |>
+    dplyr::filter(Time %in% test_set$Time) |>
+    nrow()
+
+  train_total <- nrow(train_set)
+  test_total <- nrow(test_set)
+  train_percent_flagged <- 100 * train_flagged / train_total
+  test_percent_flagged <- 100 * test_flagged / test_total
+
+  summary <- data.frame(
+    set = c("Training", "Test"),
+    flagged = c(train_flagged, test_flagged),
+    total = c(train_total, test_total),
+    percent_flagged = c(train_percent_flagged, test_percent_flagged),
+    lift = c(train_lift, test_lift)
+  )
+
+  output <- c(
+    sprintf(
+      "Training: %s flagged / %s, %.1f%%, lift %.2f",
+      scales::comma(train_flagged),
+      scales::comma(train_total),
+      train_percent_flagged,
+      train_lift
+    ),
+    sprintf(
+      "Test:     %s flagged / %s, %.1f%%, lift %.2f",
+      scales::comma(test_flagged),
+      scales::comma(test_total),
+      test_percent_flagged,
+      test_lift
+    )
+  )
+
+  if (print_output) {
+    cat(paste(output, collapse = "\n"), "\n", sep = "")
+  }
+
+  list(
+    summary = summary,
+    output = output
+  )
+}
+
 tree_alert_sort_rules_by_resid <- function(tree_rules,
                                            resid_col = ".resid",
                                            decreasing_abs = TRUE) {
@@ -301,6 +519,93 @@ tree_alert_select_rule_resids <- function(tree_rules,
     tree_rules = sorted_rules,
     selected_rules = sorted_rules[start_row:end_row, , drop = FALSE],
     rule_values = as.list(sorted_rules[[resid_col]][start_row:end_row])
+  )
+}
+
+tree_alert_pull_top_k_rules <- function(tree_rules,
+                                        n_rules,
+                                        resid_col = ".resid",
+                                        decreasing_abs = TRUE) {
+  rule_selection <- tree_alert_select_rule_resids(
+    tree_rules = tree_rules,
+    resid_col = resid_col,
+    start_row = 1,
+    end_row = n_rules,
+    decreasing_abs = decreasing_abs
+  )
+
+  list(
+    tree_rules = rule_selection$tree_rules,
+    selected_rules = rule_selection$selected_rules,
+    selected_rule_values = rule_selection$rule_values
+  )
+}
+
+tree_alert_format_rule_raw <- function(rule_row) {
+  rule_values <- as.character(unlist(rule_row, use.names = FALSE))
+  rule_names <- names(rule_row)
+  keep_values <- !is.na(rule_values) & trimws(rule_values) != ""
+  rule_values <- rule_values[keep_values]
+  rule_names <- rule_names[keep_values]
+
+  pieces <- mapply(
+    function(rule_name, rule_value, index) {
+      rule_value <- trimws(rule_value)
+      rule_name <- trimws(rule_name)
+
+      if (index == 1 && grepl("^[-+]?[0-9]", rule_value)) {
+        return(rule_value)
+      }
+
+      if (rule_name == "" || tolower(rule_name) == tolower(rule_value)) {
+        return(rule_value)
+      }
+
+      paste(rule_name, rule_value)
+    },
+    rule_names,
+    rule_values,
+    seq_along(rule_values),
+    USE.NAMES = FALSE
+  )
+
+  paste(pieces, collapse = " ")
+}
+
+tree_alert_list_top_rules <- function(selected_rules,
+                                      minute_increment = NULL,
+                                      print_output = TRUE) {
+  if (!exists("rephrase_rule", mode = "function")) {
+    stop("rephrase_rule() is not available. Source Rephrase_Rule_Func.R first.")
+  }
+
+  raw_rules <- vapply(
+    seq_len(nrow(selected_rules)),
+    function(i) tree_alert_format_rule_raw(selected_rules[i, ]),
+    character(1)
+  )
+
+  interpreted_rules <- vapply(
+    raw_rules,
+    rephrase_rule,
+    character(1),
+    minute_increment = minute_increment,
+    USE.NAMES = FALSE
+  )
+
+  rule_output <- as.vector(rbind(
+    paste("Rule", seq_along(raw_rules), "raw:", raw_rules),
+    paste("Rule", seq_along(interpreted_rules), "interpretation:", interpreted_rules)
+  ))
+
+  if (print_output) {
+    cat(paste(rule_output, collapse = "\n"), "\n", sep = "")
+  }
+
+  list(
+    raw_rules = raw_rules,
+    interpreted_rules = interpreted_rules,
+    output = rule_output
   )
 }
 

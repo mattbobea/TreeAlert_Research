@@ -16,8 +16,52 @@ library(ggplot2); library(ggtext); library(grid); library(gridExtra); # Plot
 library(slider) # Plot
 library(scales); library(rpart);  library(rpart.plot);
 source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "TA_functions.R"))
+source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "Rephrase_Rule_Func.R"))
 ```
-Define Functions:
+
+Configuration
+```{r}
+# Region,Actual Load,Forecasted Load
+# Austria (AT): AT_load_actual_entsoe_transparency, AT_load_forecast_entsoe_transparency
+# Belgium (BE): BE_load_actual_entsoe_transparency,BE_load_forecast_entsoe_transparency
+# Germany: DE_load_actual_entsoe_transparency,DE_load_forecast_entsoe_transparency
+# Germany-Lux (DE-LU BZ): DE_LU_load_actual_entsoe_transparency,DE_LU_load_forecast_entsoe_transparency
+# DE Control Area 50Hertz: DE_50hertz_load_actual_entsoe_transparency,DE_50hertz_load_forecast_entsoe_transparency
+# DE Control Area Amprion: DE_amprion_load_actual_entsoe_transparency,DE_amprion_load_forecast_entsoe_transparency
+# DE Control Area TenneT GER: DE_tennet_load_actual_entsoe_transparency,DE_tennet_load_forecast_entsoe_transparency
+# DE Control Area TransnetBW: DE_transnetbw_load_actual_entsoe_transparency,DE_transnetbw_load_forecast_entsoe_transparency
+# Hungary (HU): HU_load_actual_entsoe_transparency,HU_load_forecast_entsoe_transparency
+# Luxembourg (LU): LU_load_actual_entsoe_transparency,LU_load_forecast_entsoe_transparency
+# Netherlands (NL): NL_load_actual_entsoe_transparency,NL_load_forecast_entsoe_transparency
+
+Actual_column <- "DE_LU_load_actual_entsoe_transparency"
+Forecast_column <- "DE_LU_load_forecast_entsoe_transparency"
+
+data_start <- "2019-02-01"
+data_end <- "2019-5-30"
+
+train_start <- "2019-02-01"
+train_end <- "2019-5-01"
+
+test_start <- train_end
+test_end <- data_end
+
+n_groups <- 20
+n_rules <- 4
+minute_increment <- 15
+
+baseline_formula <- .resid ~ Minute + Hour + Weekday
+final_formula <- .resid ~ Hour + Minute + Weekday
+
+param_grid <- expand.grid(
+  cp        = c(0, 0.0001, 0.001, 0.005, 0.01),
+  minbucket = c(5, 10, 20, 30),
+  maxdepth  = c(5, 10, 15, 20, 25, 30),
+  stringsAsFactors = FALSE
+)
+```
+
+Local Functions
 ```{r}
 # temporal_encoding <- function(data) {
 #   data <- data %>%
@@ -90,7 +134,8 @@ process_data <- function(data, time_col, actual_col, forecast_col) {
 }
 
 ```
-Load files from Module 
+
+Load Data
 ```{r, warning=FALSE}
 elec_dir <- if (dir.exists("Electricity")) "Electricity" else "."
 elec_image_dir <- file.path(elec_dir, "images")
@@ -98,41 +143,15 @@ dir.create(elec_image_dir, showWarnings = FALSE, recursive = TRUE)
 raw_data <- read.csv(file.path(elec_dir, "Elec_data", "time_series_15min_singleindex.csv")) %>%
   slice(-(1:5))
 ```
-# START!  
-Select your data!
+
+Prepare Data
 ```{r}
-# Region,Actual Load,Forecasted Load
-# Austria (AT): AT_load_actual_entsoe_transparency, AT_load_forecast_entsoe_transparency
-# Belgium (BE): BE_load_actual_entsoe_transparency,BE_load_forecast_entsoe_transparency
-# Germany: DE_load_actual_entsoe_transparency,DE_load_forecast_entsoe_transparency
-# Germany-Lux (DE-LU BZ): DE_LU_load_actual_entsoe_transparency,DE_LU_load_forecast_entsoe_transparency
-# DE Control Area 50Hertz: DE_50hertz_load_actual_entsoe_transparency,DE_50hertz_load_forecast_entsoe_transparency
-# DE Control Area Amprion: DE_amprion_load_actual_entsoe_transparency,DE_amprion_load_forecast_entsoe_transparency
-# DE Control Area TenneT GER: DE_tennet_load_actual_entsoe_transparency,DE_tennet_load_forecast_entsoe_transparency
-# DE Control Area TransnetBW: DE_transnetbw_load_actual_entsoe_transparency,DE_transnetbw_load_forecast_entsoe_transparency
-# Hungary (HU): HU_load_actual_entsoe_transparency,HU_load_forecast_entsoe_transparency
-# Luxembourg (LU): LU_load_actual_entsoe_transparency,LU_load_forecast_entsoe_transparency
-# Netherlands (NL): NL_load_actual_entsoe_transparency,NL_load_forecast_entsoe_transparency
-
-# Define the specific column names you want to keep
-Actual_column <- "DE_LU_load_actual_entsoe_transparency"
-Forecast_column <- "DE_LU_load_forecast_entsoe_transparency"
-
-data_start <-"2019-02-01" 
-data_end <-"2019-5-30"
-
-train_start <- "2019-02-01"
-train_end <- "2019-5-01"
-
-test_start <- train_end 
-test_end<- data_end 
-
 #--------------------------------------------------------
 # Select only the timestamp columns (1-2) and your specified columns using dplyr
-data_df <- raw_data %>%
+analysis_data <- raw_data %>%
   select(1:2, all_of(Actual_column), all_of(Forecast_column))
 
-data_df <- process_data(
+analysis_data <- process_data(
   raw_data, 
   time_col = utc_timestamp, 
   actual_col = Actual_column, 
@@ -140,12 +159,12 @@ data_df <- process_data(
 )
 
 # Reduce data size with a Time Filter (Optional)
-data_df <- data_df[data_df$Time >= as.POSIXct(data_start, tz = "UTC"), ]
-data_df <- data_df[data_df$Time < as.POSIXct(data_end, tz = "UTC"), ]
+analysis_data <- analysis_data[analysis_data$Time >= as.POSIXct(data_start, tz = "UTC"), ]
+analysis_data <- analysis_data[analysis_data$Time < as.POSIXct(data_end, tz = "UTC"), ]
 
 # old chart
-# data_df <- data_df[data_df$Time >= as.POSIXct("2020-05-01", tz = "UTC"), ]
-# data_df <- data_df[data_df$Time <= as.POSIXct("2020-08-1", tz = "UTC"), ]
+# analysis_data <- analysis_data[analysis_data$Time >= as.POSIXct("2020-05-01", tz = "UTC"), ]
+# analysis_data <- analysis_data[analysis_data$Time <= as.POSIXct("2020-08-1", tz = "UTC"), ]
   # actual_col = LU_load_actual_entsoe_transparency, 
   # forecast_col = LU_load_forecast_entsoe_transparency cp 0 min bucket 4
 
@@ -156,20 +175,20 @@ data_df <- data_df[data_df$Time < as.POSIXct(data_end, tz = "UTC"), ]
 # train_start <- "2019-04-08"
 # train_end <- "2019-6-01"
 ```
-Create a new data frame that matches the structure of data_df
+Train/Test Split
 ```{r}
 # Aggregate by hour for more clear plots
-data_filtered <- data_df %>%
+data_filtered <- analysis_data %>%
   mutate(hour = format(Time, "%Y-%m-%d %H")) %>%
   group_by(hour) %>%
   filter(actual == max(actual)) %>%
   ungroup() %>%
   select(-hour) 
 
-data_df <- temporal_encoding(data_filtered) 
+analysis_data <- temporal_encoding(data_filtered) 
 
 # Create a copy with the required columns and modifications
-data_df <- data_df %>%
+analysis_data <- analysis_data %>%
   mutate(
     Value = actual,
     .fitted = forecast,
@@ -181,16 +200,16 @@ data_df <- data_df %>%
 #------------Train Test ------------
   
 # Determine the split index (80% of the data)
-#split_index <- floor(0.9 * nrow(data_df))
+#split_index <- floor(0.9 * nrow(analysis_data))
 # Split into training and testing sets
-#train_set <- data_df[1:split_index, ]
-#test_set <- data_df[(split_index + 1):nrow(data_df), ] #Not needed. Just quick for viewing
+#train_set <- analysis_data[1:split_index, ]
+#test_set <- analysis_data[(split_index + 1):nrow(analysis_data), ] #Not needed. Just quick for viewing
 
 #option 2 --  use time to split
-train_set <- data_df[data_df$Time > as.POSIXct(train_start, tz = "UTC") & 
-                    data_df$Time < as.POSIXct(train_end, tz = "UTC"),]
-test_set <- data_df[data_df$Time >= as.POSIXct(test_start, tz = "UTC") & 
-                    data_df$Time < as.POSIXct(test_end, tz = "UTC"),]
+train_set <- analysis_data[analysis_data$Time > as.POSIXct(train_start, tz = "UTC") & 
+                    analysis_data$Time < as.POSIXct(train_end, tz = "UTC"),]
+test_set <- analysis_data[analysis_data$Time >= as.POSIXct(test_start, tz = "UTC") & 
+                    analysis_data$Time < as.POSIXct(test_end, tz = "UTC"),]
 # train_set <- train_set %>%
   # mutate(resid_log = log1p(abs(.resid)) * sign(.resid))  # preserves sign
 
@@ -202,21 +221,21 @@ bottom_5_percent <- quantile(train_set$.resid, probs = 0.05, na.rm = TRUE)
 top_5_percent_value <- top_5_percent[[1]] 
 bottom_5_percent_value <- bottom_5_percent[[1]]
 ```
-# Make Trees + Pull Rules + Lift
+Baseline Tree
 ```{r}
 #------------Regression tree on .resid + temporal variables------------
-tree_model <- rpart(.resid ~ Minute + Hour + Weekday,
+tree_model <- rpart(baseline_formula,
                     data = train_set, method = "anova", 
                     cp = 0.0000, minbucket = 5)
 tree_rules <- rpart.rules(tree_model, cover = FALSE, digits = 4, nn = FALSE)
 
 #Attached the predicted tree nodes to DF and Maps rules/leafs to Observations
-leaf_nodes <- predict(tree_model, newdata = data_df, type = "vector")
-heart_merged_with_leaf <- dplyr::bind_cols(data_df, Leaf_Node = leaf_nodes)
+leaf_nodes <- predict(tree_model, newdata = analysis_data, type = "vector")
+analysis_data_with_leaf <- dplyr::bind_cols(analysis_data, Leaf_Node = leaf_nodes)
+```
 
-#Lift Analysis
-n_groups <- 20  # For lift
-
+Lift Charts
+```{r}
 train_results <- tree_alert_compute_lift(
   train_set, tree_model, "Leaf_Node", "Baseline (Train)",
   plot = TRUE, n_groups = n_groups,
@@ -231,22 +250,14 @@ test_results <- tree_alert_compute_lift(
 )
 ```
 
-# Grid Search: Joint Optimization of Tree Parameters + Predictor Variables  ##
+Grid Search
 ```{r}
 # Grid Search: Optimization of Tree Parameters Only
-
-# 1. Parameter grid
-param_grid <- expand.grid(
-  cp        = c(0, 0.0001, 0.001, 0.005, 0.01),
-  minbucket = c(5, 10, 20, 30),
-  maxdepth  = c(5, 10, 15, 20, 25, 30),
-  stringsAsFactors = FALSE
-)
 
 # RUN GRID SEARCH
 grid_search <- tree_alert_grid_search(
   train_set = train_set,
-  formula = .resid ~ Hour + Minute + Weekday,
+  formula = final_formula,
   param_grid = param_grid,
   n_groups = n_groups,
   pred_col_name = "Leaf_Node",
@@ -262,12 +273,10 @@ cat("  BEST TREE PARAMETERS FOUND\n")
 cat("=============================\n")
 print(best_params)
 ```
-# Train Final Model using Best Parameters + LIFT
+
+Final Model
 ```{r}
 # Train Final Model using Best Parameters + LIFT
-
-# Hardcoded formula (no longer from best_params$vars)
-final_formula <- .resid ~ Hour + Minute + Weekday
 
 cat("\n=============================\n")
 cat("  FINAL MODEL FORMULA USED\n")
@@ -288,12 +297,15 @@ cat("=============================\n")
 tree_rules <- rpart.rules(best_tree_model, cover = FALSE, digits = 4, nn = FALSE)
 
 # Attach predicted leaf node averages to full dataset
-leaf_nodes <- predict(best_tree_model, newdata = data_df, type = "vector")
-heart_merged_with_leaf <- dplyr::bind_cols(data_df, Leaf_Node = leaf_nodes)
+leaf_nodes <- predict(best_tree_model, newdata = analysis_data, type = "vector")
+analysis_data_with_leaf <- dplyr::bind_cols(analysis_data, Leaf_Node = leaf_nodes)
 
 #cat(" ATTACHED LEAF NODE PREDICTIONS\n")
-#print(head(heart_merged_with_leaf))
+#print(head(analysis_data_with_leaf))
+```
 
+Final Lift Charts
+```{r}
 # ---- Train lift (Best model) ----
 best_train_lift <- tree_alert_compute_lift(
   train_set, best_tree_model, "Leaf_Node", "Best Model (Train)",
@@ -310,7 +322,7 @@ best_test_lift <- tree_alert_compute_lift(
 
 # ---- Full-sample lift (Best model) ----
 best_full_lift <- tree_alert_compute_lift(
-  data_df, best_tree_model, "Leaf_Node", "Best Model (Full)",
+  analysis_data, best_tree_model, "Leaf_Node", "Best Model (Full)",
   plot = FALSE, n_groups = n_groups,
   lift_label = "First Ventile"
 )$lift
@@ -335,19 +347,16 @@ best_test_results <- tree_alert_compute_lift(
 )
  ggsave(file.path(elec_image_dir, "Electricity_Lift_Test.png"), plot = last_plot(), width = 8, height = 6, dpi = 1200)
 ```
-Map rules to observations and pull top-k rules
-```{r}
-# Number of top sorted terminal-node rules to retain and plot
-n_rules <- 4
 
+Top Rules
+```{r}
 # ------------Pull top-k rules------------
-top_rule_selection <- tree_alert_select_rule_resids(
+rule_selection <- tree_alert_pull_top_k_rules(
   tree_rules = tree_rules,
-  start_row = 1,
-  end_row = n_rules
+  n_rules = n_rules
 )
-tree_rules <- top_rule_selection$tree_rules
-selected_tree_rules <- top_rule_selection$selected_rules
+tree_rules <- rule_selection$tree_rules
+selected_rules <- rule_selection$selected_rules
 # # ------------Pull top rules using tail method (95th percentile)------------
 # tree_rules$.resid <- as.numeric(tree_rules$.resid)
 # 
@@ -370,36 +379,32 @@ selected_tree_rules <- top_rule_selection$selected_rules
 # tree_rules$tail95 <- NULL
 
 
-top_rule_values <- top_rule_selection$rule_values
-last_column_index <- length(top_rule_values)
+selected_rule_values <- rule_selection$selected_rule_values
+rule_text_output <- tree_alert_list_top_rules(
+  selected_rules = selected_rules,
+  minute_increment = minute_increment
+)
 ```
 
-# THE PROGRAM -- appllies rules as filter and plot results
+Rule Plots
 ```{r, warning=FALSE, message=FALSE}
 
 #------------Filter the rows for each rule for plotting------------
 list_of_dfs <- list() # Create an empty DataFrame to store the results
-for (i in seq_along(top_rule_values)) {
+for (i in seq_along(selected_rule_values)) {
 
   # Pull the next sorted rule value to filter observations for plotting
-  current_rule <- as.numeric(top_rule_values[[i]])
-  # round both to common decimal as heart_merged_with_leaf has 1 more decimal place
+  current_rule <- as.numeric(selected_rule_values[[i]])
+  # round both to common decimal as analysis_data_with_leaf has 1 more decimal place
   precision <- 2  
-  # Filter heart_merged_with_leaf
-  filtered_data <- heart_merged_with_leaf %>%
+  # Filter analysis_data_with_leaf
+  filtered_data <- analysis_data_with_leaf %>%
     filter(round(Leaf_Node, precision) == round(current_rule, precision))
     
   #------------displays the rule text before each plot------------
-  # Pull the first row from tree_rules
-  first_row <- selected_tree_rules[i, ]
-  # Filter out blank cells
-  non_blank_cells <- first_row[first_row != ""]
-  # Convert the non-blank cells to a single string using paste
-  constructed_sentence <- paste(names(non_blank_cells), non_blank_cells, collapse = " ")
+  constructed_sentence <- rule_text_output$raw_rules[i]
   rule_text <- textGrob(paste("Rule", i, "\n", constructed_sentence),
                       gp = gpar(col = "black", fontsize = 9))
-
-    print(constructed_sentence)
     
   #------------Plot of filtered rules on fitted time scale------------
   post_rules_scatter_plot <- ggplot(filtered_data, 
@@ -418,7 +423,7 @@ for (i in seq_along(top_rule_values)) {
   list_of_dfs[[i]] <- filtered_data # used to save df's for lower plot.
   
   # Plot of filtered rules on full series
-  post_rules_line_plot <- ggplot(data_df, 
+  post_rules_line_plot <- ggplot(analysis_data, 
                                  aes(x = Time, y = .resid)) +
     geom_line(color = "#00BFC4") +
     geom_point(data = filtered_data, 
@@ -436,7 +441,7 @@ for (i in seq_along(top_rule_values)) {
     theme(plot.title = element_markdown())
 
     #------------Plot of Actual Vs Predicted------------
-  actual_predicted_plot <- ggplot(data_df, aes(x = Time)) +
+  actual_predicted_plot <- ggplot(analysis_data, aes(x = Time)) +
     geom_line(aes(y = Value, color = "Actual"), show.legend = FALSE) +
     geom_point(data = filtered_data, 
                aes(x = Time, y = Value, 
@@ -461,12 +466,13 @@ for (i in seq_along(top_rule_values)) {
                   ncol = 1, heights = c(10,10))
 }
 ```
+
 All Rules Plots
 ```{r, warning=FALSE, message=FALSE}
 first_test_date <- min(test_set$Time) # marks the date of split
 
 #------------Filtered Actual Vs Predicted Plot------------
-actual_predicted_plot <- ggplot(data_df, aes(x = Time)) +
+actual_predicted_plot <- ggplot(analysis_data, aes(x = Time)) +
   geom_line(aes(y = Value, color = "Actual"),  na.rm = FALSE, show.legend = FALSE) +
   geom_line(aes(y = .fitted, color = "Fitted"), 
             alpha = 0.6, show.legend = FALSE) +
@@ -484,7 +490,7 @@ actual_predicted_plot <- ggplot(data_df, aes(x = Time)) +
 actual_predicted_plot
 
 #------------Filtered Residual Plots------------
-residual_plot <- ggplot(data_df , aes(x = Time)) +
+residual_plot <- ggplot(analysis_data , aes(x = Time)) +
   geom_line(aes(y = .resid, color = "Actual"),  na.rm = FALSE, show.legend = FALSE) +
   add_resid_points_func(list_of_dfs, color_string, # Generate geom_point layers
                                       c("TRUE" = 1, "FALSE" = 16)) + 
@@ -503,12 +509,12 @@ ggsave(file.path(elec_image_dir, "Electricity5.png"),
        plot = two_plots, width = 6, height = 4.5, dpi = 800) 
 ```
 
-Calculate Precision and Related Metrics 
+Metrics
 ```{r, eval=FALSE}
 # Precision calculations are disabled; leave this chunk unevaluated so the
 # mean-error-lift section below can rebuild the needed train/test metrics.
 #Calculate Precision for Train Set
-train_filtered <- heart_merged_with_leaf %>%
+train_filtered <- analysis_data_with_leaf %>%
   filter(Time >= as.POSIXct(train_start, tz = "UTC") & 
          Time <  as.POSIXct(train_end,   tz = "UTC"))
 
@@ -539,7 +545,7 @@ cat("Precision:", round(precision * 100, 2), "%\n")
 
 # Calculate Precision for Test Set
 
-test_filtered <- heart_merged_with_leaf %>%
+test_filtered <- analysis_data_with_leaf %>%
   filter(Time >= as.POSIXct(test_start, tz = "UTC") & 
          Time <  as.POSIXct(test_end,   tz = "UTC"))
 
@@ -572,11 +578,11 @@ cat("Precision:", round(precision_test * 100, 2), "%\n")
 # Mean Error Lift: Flagged vs All Observations
 
 if (!exists("train_metrics") || !exists("test_metrics")) {
-  train_filtered <- heart_merged_with_leaf %>%
+  train_filtered <- analysis_data_with_leaf %>%
     filter(Time >= as.POSIXct(train_start, tz = "UTC") &
            Time <  as.POSIXct(train_end,   tz = "UTC"))
 
-  test_filtered <- heart_merged_with_leaf %>%
+  test_filtered <- analysis_data_with_leaf %>%
     filter(Time >= as.POSIXct(test_start, tz = "UTC") &
            Time <  as.POSIXct(test_end,   tz = "UTC"))
 
@@ -644,6 +650,34 @@ cat("Mean error of all points:    ", round(mean_error_all_test,    2), "\n")
 cat("Mean Error Lift:             ", round(mean_error_lift_test,   2), "\n")
 ```
 
+Performance Summary
+```{r}
+performance_summary <- tree_alert_performance_summary(
+  list_of_dfs = list_of_dfs,
+  train_set = train_set,
+  test_set = test_set,
+  train_lift = best_train_lift,
+  test_lift = best_test_lift
+)
+```
 
+Sensitivity Analysis
+```{r, warning=FALSE, message=FALSE}
+sensitivity_analysis <- tree_alert_sensitivity_analysis(
+  train_set = train_set,
+  test_set = test_set,
+  formula = final_formula,
+  param_grid = param_grid,
+  n_groups = n_groups,
+  reference_train_lift = best_train_lift,
+  reference_test_lift = best_test_lift,
+  train_image_path = file.path(elec_image_dir, "elec_sensitivity_train_lift.png"),
+  test_image_path = file.path(elec_image_dir, "elec_sensitivity_test_lift.png")
+)
 
-
+sensitivity_results <- sensitivity_analysis$results
+sensitivity_train_plot <- sensitivity_analysis$train_plot
+sensitivity_test_plot <- sensitivity_analysis$test_plot
+sensitivity_train_plot
+sensitivity_test_plot
+```

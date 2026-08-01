@@ -183,11 +183,7 @@ rephrase_rule <- function(text, minute_increment = NULL) {
   
   return(final_text)
 }
-#-------------------------------------------
-#Enter content HERE!!!!
-
-# Example usage (if you data's minutes column is in 5, 10,or 15 increment, specify it )
-text <- "-534 when Weekday is Sun & Hour is 13 or 16 & Minute is 0"
-rephrased_text <- rephrase_rule(text, minute_increment = 15) 
-cat("Rephrased Text:", rephrased_text)
-# for list of hours, use commas in between them all except the last joint is and.  same thing for days and months.  
+# Example:
+# rephrase_rule("-534 when Weekday is Sun & Hour is 13 or 16 & Minute is 0",
+#               minute_increment = 15)
+# For lists of hours, days, and months, use commas between all values except the last.
