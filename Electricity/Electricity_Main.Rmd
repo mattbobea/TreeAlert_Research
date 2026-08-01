@@ -715,7 +715,7 @@ feature_sensitivity_analysis <- tree_alert_feature_sensitivity_analysis(
     "Minute + Hour" = .resid ~ Minute + Hour,
     "Hour + Weekday" = .resid ~ Hour + Weekday,
     "Minute + Hour + Weekday" = .resid ~ Minute + Hour + Weekday,
-    "Hour + Month" = .resid ~ Hour + Month,
+    "Weekday + Month" = .resid ~ Weekday + Month,
     "Minute + Hour + Month" = .resid ~ Minute + Hour + Month,
     "Hour + Weekday + Month" = .resid ~ Hour + Weekday + Month,
     "Minute + Hour + Weekday + Month" = .resid ~ Minute + Hour + Weekday + Month

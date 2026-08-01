@@ -272,6 +272,23 @@ tree_alert_train_best_model <- function(train_set, formula, best_params) {
   )
 }
 
+tree_alert_lift_axis_limits <- function(x, step = 0.1) {
+  x <- x[is.finite(x)]
+  if (!length(x)) {
+    return(c(0, step))
+  }
+
+  c(
+    floor(min(x) / step) * step,
+    ceiling(max(x) / step) * step
+  )
+}
+
+tree_alert_lift_axis_breaks <- function(x, step = 0.1) {
+  limits <- tree_alert_lift_axis_limits(x, step)
+  seq(limits[1], limits[2], by = step)
+}
+
 tree_alert_sensitivity_analysis <- function(train_set,
                                             test_set,
                                             formula,
@@ -285,7 +302,7 @@ tree_alert_sensitivity_analysis <- function(train_set,
                                             train_image_path = NULL,
                                             test_image_path = NULL,
                                             width = 8,
-                                            height = 4.2,
+                                            height = 4.0,
                                             dpi = 1000) {
   lift_metric <- match.arg(lift_metric)
 
@@ -377,11 +394,16 @@ tree_alert_sensitivity_analysis <- function(train_set,
       ) +
       ggplot2::facet_wrap(~ parameter, scales = "free_x", nrow = 1) +
       ggplot2::scale_x_discrete(labels = function(x) sub("^.*__", "", x)) +
+      ggplot2::scale_y_continuous(
+        limits = tree_alert_lift_axis_limits,
+        breaks = tree_alert_lift_axis_breaks,
+        labels = scales::label_number(accuracy = 0.1)
+      ) +
       ggplot2::labs(
         x = NULL,
         y = y_label
       ) +
-      ggplot2::theme_bw(base_size = 11) +
+      ggplot2::theme_bw(base_size = 13) +
       ggplot2::theme(
         panel.grid.major.x = ggplot2::element_blank(),
         panel.grid.minor = ggplot2::element_blank(),
@@ -505,7 +527,7 @@ tree_alert_split_sensitivity_analysis <- function(data,
                                                   reference_test_lift = NULL,
                                                   train_image_path = NULL,
                                                   test_image_path = NULL,
-                                                  width = 7,
+                                                  width = 8,
                                                   height = 4.2,
                                                   dpi = 1000) {
   lift_metric <- match.arg(lift_metric)
@@ -564,7 +586,7 @@ tree_alert_split_sensitivity_analysis <- function(data,
       )
 
       data.frame(
-        train_share = 100 * split_index / n_obs,
+        train_share = split_grid$target_train_share[i],
         train_periods = nrow(split_train),
         test_periods = nrow(split_test),
         cp = grid_search$best_params$cp,
@@ -596,14 +618,20 @@ tree_alert_split_sensitivity_analysis <- function(data,
       ggplot2::geom_line(color = "grey30", linewidth = 0.45) +
       ggplot2::geom_point(shape = 21, size = 2.2, fill = "grey92", color = "grey20") +
       ggplot2::scale_x_continuous(
-        breaks = unique(round(split_results$train_share, 1)),
+        limits = c(train_share_min, train_share_max),
+        breaks = seq(train_share_min, train_share_max, by = train_share_step),
         labels = function(x) paste0(round(x, 1), "%")
+      ) +
+      ggplot2::scale_y_continuous(
+        limits = tree_alert_lift_axis_limits,
+        breaks = tree_alert_lift_axis_breaks,
+        labels = scales::label_number(accuracy = 0.1)
       ) +
       ggplot2::labs(
         x = "Training Share",
         y = y_label
       ) +
-      ggplot2::theme_bw(base_size = 11) +
+      ggplot2::theme_bw(base_size = 13) +
       ggplot2::theme(
         panel.grid.minor = ggplot2::element_blank(),
         axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)
@@ -745,10 +773,9 @@ tree_alert_feature_sensitivity_analysis <- function(train_set,
         labels = c("Training", "Test")
       )
     )
-
   feature_plot <- ggplot2::ggplot(
     feature_plot_data,
-    ggplot2::aes(x = lift, y = specification, color = set, shape = set)
+    ggplot2::aes(x = lift, y = specification, color = set)
   ) +
     ggplot2::geom_vline(
       xintercept = 1,
@@ -768,41 +795,31 @@ tree_alert_feature_sensitivity_analysis <- function(train_set,
       color = "grey70",
       size = 0.35
     ) +
-    ggplot2::geom_point(size = 2.4) +
+    ggplot2::geom_path(ggplot2::aes(group = set), linewidth = 0.45) +
+    ggplot2::geom_point(ggplot2::aes(shape = set), size = 2.4, show.legend = FALSE) +
     ggplot2::scale_color_manual(values = c("Training" = "grey20", "Test" = "#B2182B")) +
-    ggplot2::scale_shape_manual(values = c("Training" = 16, "Test" = 17)) +
+    ggplot2::scale_shape_manual(values = c("Training" = 16, "Test" = 17), guide = "none") +
+    ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = c(0.02, 0.08))) +
+    ggplot2::scale_y_discrete(expand = ggplot2::expansion(add = 0.45)) +
     ggplot2::labs(
       x = "First-Ventile Lift",
       y = "Feature Specification",
-      color = NULL,
-      shape = NULL
+      color = NULL
     ) +
-    ggplot2::theme_bw(base_size = 11) +
+    ggplot2::theme_bw(base_size = 13) +
     ggplot2::theme(
       panel.grid.minor = ggplot2::element_blank(),
-      legend.position = "bottom",
+      legend.position = "inside",
+      legend.position.inside = c(0.97, 0.97),
+      legend.justification = c(1, 1),
+      legend.background = ggplot2::element_rect(
+        fill = ggplot2::alpha("white", 0.9),
+        color = "grey80",
+        linewidth = 0.25
+      ),
+      legend.key = ggplot2::element_rect(fill = ggplot2::alpha("white", 0)),
       axis.text.y = ggplot2::element_text(hjust = 1)
     )
-
-  if (!is.null(reference_train_lift)) {
-    feature_plot <- feature_plot +
-      ggplot2::geom_vline(
-        xintercept = reference_train_lift,
-        linetype = "dashed",
-        color = "grey20",
-        size = 0.35
-      )
-  }
-
-  if (!is.null(reference_test_lift)) {
-    feature_plot <- feature_plot +
-      ggplot2::geom_vline(
-        xintercept = reference_test_lift,
-        linetype = "dashed",
-        color = "#B2182B",
-        size = 0.35
-      )
-  }
 
   if (!is.null(image_path)) {
     ggplot2::ggsave(
