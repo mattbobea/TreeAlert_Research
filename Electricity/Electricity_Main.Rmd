@@ -139,7 +139,9 @@ Load Data
 ```{r, warning=FALSE}
 elec_dir <- if (dir.exists("Electricity")) "Electricity" else "."
 elec_image_dir <- file.path(elec_dir, "images")
+elec_sensitivity_image_dir <- file.path(elec_image_dir, "sensitivity")
 dir.create(elec_image_dir, showWarnings = FALSE, recursive = TRUE)
+dir.create(elec_sensitivity_image_dir, showWarnings = FALSE, recursive = TRUE)
 raw_data <- read.csv(file.path(elec_dir, "Elec_data", "time_series_15min_singleindex.csv")) %>%
   slice(-(1:5))
 ```
@@ -671,8 +673,8 @@ sensitivity_analysis <- tree_alert_sensitivity_analysis(
   n_groups = n_groups,
   reference_train_lift = best_train_lift,
   reference_test_lift = best_test_lift,
-  train_image_path = file.path(elec_image_dir, "elec_sensitivity_train_lift.png"),
-  test_image_path = file.path(elec_image_dir, "elec_sensitivity_test_lift.png")
+  train_image_path = file.path(elec_sensitivity_image_dir, "elec_sensitivity_train_lift.png"),
+  test_image_path = file.path(elec_sensitivity_image_dir, "elec_sensitivity_test_lift.png")
 )
 
 sensitivity_results <- sensitivity_analysis$results
@@ -694,8 +696,8 @@ split_sensitivity_analysis <- tree_alert_split_sensitivity_analysis(
   train_share_step = 1,
   reference_train_lift = best_train_lift,
   reference_test_lift = best_test_lift,
-  train_image_path = file.path(elec_image_dir, "elec_split_sensitivity_train_lift.png"),
-  test_image_path = file.path(elec_image_dir, "elec_split_sensitivity_test_lift.png")
+  train_image_path = file.path(elec_sensitivity_image_dir, "elec_split_sensitivity_train_lift.png"),
+  test_image_path = file.path(elec_sensitivity_image_dir, "elec_split_sensitivity_test_lift.png")
 )
 
 split_sensitivity_results <- split_sensitivity_analysis$results
@@ -724,7 +726,7 @@ feature_sensitivity_analysis <- tree_alert_feature_sensitivity_analysis(
   n_groups = n_groups,
   reference_train_lift = best_train_lift,
   reference_test_lift = best_test_lift,
-  image_path = file.path(elec_image_dir, "elec_feature_sensitivity_lift.png"),
+  image_path = file.path(elec_sensitivity_image_dir, "elec_feature_sensitivity_lift.png"),
   height = 4.8
 )
 
@@ -732,4 +734,68 @@ feature_sensitivity_results <- feature_sensitivity_analysis$results
 feature_sensitivity_plot <- feature_sensitivity_analysis$plot
 feature_sensitivity_results
 feature_sensitivity_plot
+```
+
+K-Rule Sensitivity Analysis
+```{r, warning=FALSE, message=FALSE}
+k_rule_sensitivity_analysis <- tree_alert_k_rule_sensitivity_analysis(
+  train_set = train_set,
+  test_set = test_set,
+  tree_rules = tree_rules,
+  model = best_tree_model,
+  k_values = 1:10,
+  n_groups = n_groups,
+  lift_metric = "mean_abs",
+  image_path = file.path(elec_sensitivity_image_dir, "elec_k_rule_sensitivity_lift.png")
+)
+
+k_rule_sensitivity_results <- k_rule_sensitivity_analysis$results
+k_rule_sensitivity_plot <- k_rule_sensitivity_analysis$plot
+k_rule_sensitivity_results
+k_rule_sensitivity_plot
+```
+
+Update Results Summary
+```{r, warning=FALSE, message=FALSE}
+tree_alert_update_results_summary(
+  output_path = file.path(if (dir.exists("TA_functions")) "." else "..", "Results", "TreeAlert_results_summary.md"),
+  section_id = "electricity",
+  title = "Electricity Demand",
+  analysis_target = "Forecast Error",
+  formula = final_formula,
+  n_groups = n_groups,
+  n_rules = n_rules,
+  minute_increment = minute_increment,
+  train_set = train_set,
+  test_set = test_set,
+  best_params = best_params,
+  train_lift = best_train_lift,
+  test_lift = best_test_lift,
+  full_lift = best_full_lift,
+  performance_summary = performance_summary,
+  rule_text_output = rule_text_output,
+  sensitivity_results = sensitivity_results,
+  split_sensitivity_results = split_sensitivity_results,
+  feature_sensitivity_results = feature_sensitivity_results,
+  k_rule_sensitivity_results = k_rule_sensitivity_results,
+  image_outputs = data.frame(
+    output = c(
+      "train_lift", "test_lift", "visualization",
+      "hyperparameter_train", "hyperparameter_test",
+      "split_train", "split_test",
+      "feature_granularity", "k_rule"
+    ),
+    path = c(
+      file.path(elec_image_dir, "Electricity_Lift_Train.png"),
+      file.path(elec_image_dir, "Electricity_Lift_Test.png"),
+      file.path(elec_image_dir, "Electricity5.png"),
+      file.path(elec_sensitivity_image_dir, "elec_sensitivity_train_lift.png"),
+      file.path(elec_sensitivity_image_dir, "elec_sensitivity_test_lift.png"),
+      file.path(elec_sensitivity_image_dir, "elec_split_sensitivity_train_lift.png"),
+      file.path(elec_sensitivity_image_dir, "elec_split_sensitivity_test_lift.png"),
+      file.path(elec_sensitivity_image_dir, "elec_feature_sensitivity_lift.png"),
+      file.path(elec_sensitivity_image_dir, "elec_k_rule_sensitivity_lift.png")
+    )
+  )
+)
 ```

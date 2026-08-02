@@ -837,6 +837,142 @@ tree_alert_feature_sensitivity_analysis <- function(train_set,
   )
 }
 
+tree_alert_k_rule_sensitivity_analysis <- function(train_set,
+                                                   test_set,
+                                                   tree_rules,
+                                                   model,
+                                                   k_values = 1:10,
+                                                   n_groups = 20,
+                                                   actual_col = ".resid",
+                                                   pred_col_name = "Pred_K_Rule_Sensitivity",
+                                                   lift_metric = c("mean_abs", "rmse"),
+                                                   image_path = NULL,
+                                                   width = 7,
+                                                   height = 4.2,
+                                                   dpi = 1000) {
+  lift_metric <- match.arg(lift_metric)
+
+  k_values <- sort(unique(as.integer(k_values)))
+  k_values <- k_values[!is.na(k_values) & k_values > 0]
+  if (length(k_values) == 0) {
+    stop("k_values must contain at least one positive integer.")
+  }
+
+  train_leaf_scores <- unique(as.numeric(predict(model, newdata = train_set, type = "vector")))
+  train_leaf_scores <- train_leaf_scores[is.finite(train_leaf_scores)]
+  sorted_rule_values <- train_leaf_scores[order(abs(train_leaf_scores), decreasing = TRUE)]
+
+  max_available_rules <- length(sorted_rule_values)
+  if (max_available_rules == 0) {
+    stop("model must produce at least one finite terminal-node prediction.")
+  }
+
+  k_values <- k_values[k_values <= max_available_rules]
+  if (length(k_values) == 0) {
+    stop("No k_values are less than or equal to the number of available rules.")
+  }
+
+  score_rule_data <- function(data, selected_rule_values) {
+    scored_data <- as.data.frame(data)
+    leaf_scores <- as.numeric(predict(model, newdata = scored_data, type = "vector"))
+    covered_by_rule <- leaf_scores %in% selected_rule_values
+
+    scored_data[[pred_col_name]] <- ifelse(covered_by_rule, abs(leaf_scores), 0)
+    scored_data
+  }
+
+  lift_summary <- if (lift_metric == "rmse") {
+    function(error) sqrt(mean(error^2, na.rm = TRUE))
+  } else {
+    function(error) mean(abs(error), na.rm = TRUE)
+  }
+
+  compute_rule_set_lift <- function(scored_data) {
+    flagged <- scored_data[[pred_col_name]] > 0
+    if (!any(flagged, na.rm = TRUE)) {
+      return(NA_real_)
+    }
+
+    lift_summary(scored_data[[actual_col]][flagged]) /
+      lift_summary(scored_data[[actual_col]])
+  }
+
+  k_results <- do.call(
+    rbind,
+    lapply(k_values, function(k) {
+      selected_rule_values <- sorted_rule_values[seq_len(k)]
+
+      k_train <- score_rule_data(train_set, selected_rule_values)
+      k_test <- score_rule_data(test_set, selected_rule_values)
+
+      data.frame(
+        k = k,
+        train_flagged = sum(k_train[[pred_col_name]] > 0, na.rm = TRUE),
+        test_flagged = sum(k_test[[pred_col_name]] > 0, na.rm = TRUE),
+        train_lift = compute_rule_set_lift(k_train),
+        test_lift = compute_rule_set_lift(k_test)
+      )
+    })
+  )
+
+  k_plot_data <- k_results |>
+    tidyr::pivot_longer(
+      cols = c(train_lift, test_lift),
+      names_to = "set",
+      values_to = "lift"
+    ) |>
+    dplyr::mutate(
+      set = factor(
+        set,
+        levels = c("train_lift", "test_lift"),
+        labels = c("Training", "Test")
+      )
+    )
+
+  k_plot <- ggplot2::ggplot(
+    k_plot_data,
+    ggplot2::aes(x = k, y = lift, color = set)
+  ) +
+    ggplot2::geom_hline(yintercept = 1, linetype = "dotted", color = "grey55", linewidth = 0.4) +
+    ggplot2::geom_line(linewidth = 0.55) +
+    ggplot2::geom_point(shape = 21, size = 2.3, fill = "white", stroke = 0.8) +
+    ggplot2::scale_color_manual(values = c("Training" = "grey25", "Test" = "#B2182B")) +
+    ggplot2::scale_x_continuous(breaks = k_values) +
+    ggplot2::scale_y_continuous(
+      breaks = scales::breaks_pretty(n = 6),
+      labels = scales::label_number(accuracy = 0.1)
+    ) +
+    ggplot2::labs(
+      x = "Number of Rules (k)",
+      y = "Top-k Rule Lift",
+      color = NULL
+    ) +
+    ggplot2::theme_bw(base_size = 13) +
+    ggplot2::theme(
+      panel.grid.minor = ggplot2::element_blank(),
+      legend.position = c(0.98, 0.98),
+      legend.justification = c(1, 1),
+      legend.background = ggplot2::element_rect(fill = ggplot2::alpha("white", 0.8), color = "grey70"),
+      legend.key = ggplot2::element_rect(fill = ggplot2::alpha("white", 0)),
+      axis.text.x = ggplot2::element_text(angle = 0, hjust = 0.5)
+    )
+
+  if (!is.null(image_path)) {
+    ggplot2::ggsave(
+      image_path,
+      plot = k_plot,
+      width = width,
+      height = height,
+      dpi = dpi
+    )
+  }
+
+  list(
+    results = k_results,
+    plot = k_plot
+  )
+}
+
 tree_alert_sort_rules_by_resid <- function(tree_rules,
                                            resid_col = ".resid",
                                            decreasing_abs = TRUE) {
@@ -1009,5 +1145,232 @@ tree_alert_select_positive_negative_rules <- function(tree_rules,
     selected_rules = selected_rules,
     rule_values = as.list(selected_rules$resid),
     rule_rows = selected_rules$row_id
+  )
+}
+
+tree_alert_markdown_cell <- function(x, digits = 4) {
+  if (length(x) == 0 || is.null(x) || is.na(x)) {
+    return("")
+  }
+
+  if (is.numeric(x)) {
+    value <- if (isTRUE(all.equal(x, round(x)))) {
+      format(x, trim = TRUE, scientific = FALSE)
+    } else {
+      format(round(x, digits), trim = TRUE, scientific = FALSE)
+    }
+  } else {
+    value <- as.character(x)
+  }
+
+  value <- gsub("\\|", "\\\\|", value)
+  value <- gsub("\r?\n", "<br>", value)
+  trimws(value)
+}
+
+tree_alert_markdown_table <- function(data, digits = 4, max_rows = NULL) {
+  if (is.null(data) || length(data) == 0) {
+    return("_No values recorded._")
+  }
+
+  data <- as.data.frame(data)
+  if (!is.null(max_rows) && nrow(data) > max_rows) {
+    data <- utils::head(data, max_rows)
+  }
+
+  if (nrow(data) == 0 || ncol(data) == 0) {
+    return("_No values recorded._")
+  }
+
+  names(data) <- vapply(names(data), tree_alert_markdown_cell, character(1), digits = digits)
+  body <- apply(
+    data,
+    1,
+    function(row) paste0("| ", paste(vapply(row, tree_alert_markdown_cell, character(1), digits = digits), collapse = " | "), " |")
+  )
+
+  c(
+    paste0("| ", paste(names(data), collapse = " | "), " |"),
+    paste0("| ", paste(rep("---", ncol(data)), collapse = " | "), " |"),
+    body
+  )
+}
+
+tree_alert_rules_table <- function(rule_text_output) {
+  if (is.null(rule_text_output) || is.null(rule_text_output$raw_rules)) {
+    return(NULL)
+  }
+
+  data.frame(
+    rule = seq_along(rule_text_output$raw_rules),
+    raw_rule = rule_text_output$raw_rules,
+    interpretation = rule_text_output$interpreted_rules,
+    stringsAsFactors = FALSE
+  )
+}
+
+tree_alert_update_markdown_section <- function(file_path, section_id, section_lines) {
+  dir.create(dirname(file_path), showWarnings = FALSE, recursive = TRUE)
+
+  start_marker <- paste0("<!-- TREE_ALERT_RESULTS_START:", section_id, " -->")
+  end_marker <- paste0("<!-- TREE_ALERT_RESULTS_END:", section_id, " -->")
+  section_block <- c(start_marker, section_lines, end_marker)
+
+  if (file.exists(file_path)) {
+    existing_lines <- readLines(file_path, warn = FALSE)
+  } else {
+    existing_lines <- c(
+      "# TreeAlert Run Results",
+      "",
+      "This file is generated by the TreeAlert R Markdown runs. Each section is replaced on subsequent runs of the corresponding analysis.",
+      ""
+    )
+  }
+
+  start_index <- which(existing_lines == start_marker)
+  end_index <- which(existing_lines == end_marker)
+
+  if (length(start_index) == 1 && length(end_index) == 1 && start_index < end_index) {
+    before_section <- if (start_index > 1) existing_lines[seq_len(start_index - 1)] else character(0)
+    after_section <- if (end_index < length(existing_lines)) existing_lines[(end_index + 1):length(existing_lines)] else character(0)
+    updated_lines <- c(
+      before_section,
+      section_block,
+      after_section
+    )
+  } else {
+    updated_lines <- c(existing_lines, "", section_block)
+  }
+
+  writeLines(updated_lines, file_path)
+  invisible(file_path)
+}
+
+tree_alert_update_results_summary <- function(output_path,
+                                              section_id,
+                                              title,
+                                              analysis_choice = NULL,
+                                              analysis_target = NULL,
+                                              formula = NULL,
+                                              n_groups = NULL,
+                                              n_rules = NULL,
+                                              minute_increment = NULL,
+                                              train_set = NULL,
+                                              test_set = NULL,
+                                              best_params = NULL,
+                                              train_lift = NULL,
+                                              test_lift = NULL,
+                                              full_lift = NULL,
+                                              performance_summary = NULL,
+                                              rule_text_output = NULL,
+                                              rule_coverage = NULL,
+                                              sensitivity_results = NULL,
+                                              split_sensitivity_results = NULL,
+                                              feature_sensitivity_results = NULL,
+                                              k_rule_sensitivity_results = NULL,
+                                              image_outputs = NULL) {
+  timestamp <- format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")
+
+  split_summary <- data.frame(
+    set = c("Training", "Test"),
+    periods = c(if (!is.null(train_set)) nrow(train_set) else NA_integer_,
+                if (!is.null(test_set)) nrow(test_set) else NA_integer_),
+    start = c(if (!is.null(train_set) && "Time" %in% names(train_set)) min(train_set$Time, na.rm = TRUE) else NA,
+              if (!is.null(test_set) && "Time" %in% names(test_set)) min(test_set$Time, na.rm = TRUE) else NA),
+    end = c(if (!is.null(train_set) && "Time" %in% names(train_set)) max(train_set$Time, na.rm = TRUE) else NA,
+            if (!is.null(test_set) && "Time" %in% names(test_set)) max(test_set$Time, na.rm = TRUE) else NA)
+  )
+
+  lift_summary <- data.frame(
+    metric = character(0),
+    value = numeric(0)
+  )
+  if (!is.null(train_lift)) {
+    lift_summary <- rbind(
+      lift_summary,
+      data.frame(metric = "Training first-ventile lift", value = train_lift)
+    )
+  }
+  if (!is.null(test_lift)) {
+    lift_summary <- rbind(
+      lift_summary,
+      data.frame(metric = "Test first-ventile lift", value = test_lift)
+    )
+  }
+  if (!is.null(full_lift)) {
+    lift_summary <- rbind(
+      lift_summary,
+      data.frame(metric = "Full-sample first-ventile lift", value = full_lift)
+    )
+  }
+  lift_summary <- lift_summary[!is.na(lift_summary$value), , drop = FALSE]
+
+  performance_table <- if (!is.null(performance_summary) && !is.null(performance_summary$summary)) {
+    performance_summary$summary
+  } else {
+    NULL
+  }
+
+  rules_table <- tree_alert_rules_table(rule_text_output)
+
+  if (!is.null(image_outputs) && "path" %in% names(image_outputs)) {
+    image_outputs$path <- vapply(
+      image_outputs$path,
+      normalizePath,
+      character(1),
+      winslash = "/",
+      mustWork = FALSE
+    )
+  }
+
+  section_lines <- c(
+    paste0("## ", title),
+    "",
+    paste0("- Last updated: ", timestamp),
+    paste0("- Analysis choice: ", ifelse(is.null(analysis_choice), "not applicable", analysis_choice)),
+    paste0("- Analysis target: ", ifelse(is.null(analysis_target), "not recorded", analysis_target)),
+    paste0("- Formula: `", ifelse(is.null(formula), "not recorded", paste(deparse(formula), collapse = " ")), "`"),
+    paste0("- Number of lift groups: ", ifelse(is.null(n_groups), "not recorded", n_groups)),
+    paste0("- Number of retained rules: ", ifelse(is.null(n_rules), "not recorded", n_rules)),
+    paste0("- Minute increment: ", ifelse(is.null(minute_increment), "not recorded", minute_increment)),
+    "",
+    "### Data Split",
+    tree_alert_markdown_table(split_summary),
+    "",
+    "### Best Tree Parameters",
+    tree_alert_markdown_table(best_params),
+    "",
+    "### Lift Values",
+    tree_alert_markdown_table(lift_summary),
+    "",
+    "### Paper Performance Table",
+    tree_alert_markdown_table(performance_table),
+    "",
+    "### Selected Rules: Raw and Interpreted",
+    tree_alert_markdown_table(rules_table),
+    "",
+    "### Rule Coverage",
+    tree_alert_markdown_table(rule_coverage),
+    "",
+    "### Hyperparameter Sensitivity Results",
+    tree_alert_markdown_table(sensitivity_results),
+    "",
+    "### Train/Test Split Sensitivity Results",
+    tree_alert_markdown_table(split_sensitivity_results),
+    "",
+    "### Feature Granularity Sensitivity Results",
+    tree_alert_markdown_table(feature_sensitivity_results),
+    "",
+    "### K-Rule Sensitivity Results",
+    tree_alert_markdown_table(k_rule_sensitivity_results),
+    "",
+    "### Image Outputs",
+    tree_alert_markdown_table(image_outputs)
+  )
+
+  tree_alert_update_markdown_section(
+    file_path = output_path,
+    section_id = section_id,
+    section_lines = section_lines
   )
 }

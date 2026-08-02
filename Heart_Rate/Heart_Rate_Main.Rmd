@@ -46,7 +46,18 @@ Load Data
 ```{r, include=FALSE, warning=FALSE, message=FALSE}
 heart_dir <- if (dir.exists("Heart_Rate")) "Heart_Rate" else "."
 heart_image_dir <- file.path(heart_dir, "images")
+heart_sensitivity_image_dir <- file.path(heart_image_dir, "sensitivity")
+heart_output_prefix <- dplyr::case_when(
+  ANALYSIS_CHOICE == 1 ~ "hr_rmse",
+  ANALYSIS_CHOICE == 2 ~ "hr_winkler_score",
+  ANALYSIS_CHOICE == 3 ~ "hr_crps",
+  TRUE ~ "hr_analysis"
+)
+heart_image_file <- function(filename) {
+  paste0(heart_output_prefix, "_", filename)
+}
 dir.create(heart_image_dir, showWarnings = FALSE, recursive = TRUE)
+dir.create(heart_sensitivity_image_dir, showWarnings = FALSE, recursive = TRUE)
 heart_data_1 <- readRDS(file.path(heart_dir, "HR_data", "heart_combined.rds"))
 heart_data_2 <- readRDS(file.path(heart_dir, "HR_data", "heart_new_data.rds"))
 ```
@@ -206,7 +217,7 @@ best_train <- tree_alert_compute_lift(
   lift_metric = lift_metric,
   axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
 )
-ggsave(file.path(heart_image_dir, "winkler_lift_train.png"), plot = last_plot(), width = 8, height = 6, dpi = 1000)
+ggsave(file.path(heart_image_dir, heart_image_file("lift_train.png")), plot = last_plot(), width = 8, height = 6, dpi = 1000)
 best_test <- tree_alert_compute_lift(
   test_set, best_tree_model, "Pred_Best", "Best Model (Test)",
   plot = TRUE, n_groups = n_groups,
@@ -214,8 +225,9 @@ best_test <- tree_alert_compute_lift(
   lift_metric = lift_metric,
   axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
 )
-ggsave(file.path(heart_image_dir, "winkler_lift_test.png"), plot = last_plot(), width = 8, height = 6, dpi = 1000)
+ggsave(file.path(heart_image_dir, heart_image_file("lift_test.png")), plot = last_plot(), width = 8, height = 6, dpi = 1000)
 ```
+
 Top Rules
 ```{r}
 # ------------Pull top sorted terminal-node rules------------
@@ -391,7 +403,7 @@ two_plots <- grid.arrange(actual_predicted_plot, residual_plot, ncol = 1)
 # Export the plot
 #ggsave("HeartRate.png", 
 #       plot = two_plots, width = 6, height = 4, dpi = 800) 
-ggsave(file.path(heart_image_dir, "hr_viz.png"), 
+ggsave(file.path(heart_image_dir, heart_image_file("viz.png")), 
        plot = two_plots, width = 6, height = 4.5, dpi = 800)
 ```
 Metrics
@@ -416,8 +428,8 @@ sensitivity_analysis <- tree_alert_sensitivity_analysis(
   lift_metric = lift_metric,
   reference_train_lift = best_train$lift,
   reference_test_lift = best_test$lift,
-  train_image_path = file.path(heart_image_dir, "hr_sensitivity_train_lift.png"),
-  test_image_path = file.path(heart_image_dir, "hr_sensitivity_test_lift.png")
+  train_image_path = file.path(heart_sensitivity_image_dir, heart_image_file("sensitivity_train_lift.png")),
+  test_image_path = file.path(heart_sensitivity_image_dir, heart_image_file("sensitivity_test_lift.png"))
 )
 
 sensitivity_results <- sensitivity_analysis$results
@@ -440,8 +452,8 @@ split_sensitivity_analysis <- tree_alert_split_sensitivity_analysis(
   train_share_step = 1,
   reference_train_lift = best_train$lift,
   reference_test_lift = best_test$lift,
-  train_image_path = file.path(heart_image_dir, "hr_split_sensitivity_train_lift.png"),
-  test_image_path = file.path(heart_image_dir, "hr_split_sensitivity_test_lift.png")
+  train_image_path = file.path(heart_sensitivity_image_dir, heart_image_file("split_sensitivity_train_lift.png")),
+  test_image_path = file.path(heart_sensitivity_image_dir, heart_image_file("split_sensitivity_test_lift.png"))
 )
 
 split_sensitivity_results <- split_sensitivity_analysis$results
@@ -467,7 +479,7 @@ feature_sensitivity_analysis <- tree_alert_feature_sensitivity_analysis(
   lift_metric = lift_metric,
   reference_train_lift = best_train$lift,
   reference_test_lift = best_test$lift,
-  image_path = file.path(heart_image_dir, "hr_feature_sensitivity_lift.png"),
+  image_path = file.path(heart_sensitivity_image_dir, heart_image_file("feature_sensitivity_lift.png")),
   height = 4.2
 )
 
@@ -475,4 +487,83 @@ feature_sensitivity_results <- feature_sensitivity_analysis$results
 feature_sensitivity_plot <- feature_sensitivity_analysis$plot
 feature_sensitivity_results
 feature_sensitivity_plot
+```
+
+K-Rule Sensitivity Analysis
+```{r, warning=FALSE, message=FALSE}
+k_rule_sensitivity_analysis <- tree_alert_k_rule_sensitivity_analysis(
+  train_set = train_set,
+  test_set = test_set,
+  tree_rules = tree_rules,
+  model = best_tree_model,
+  k_values = 1:10,
+  n_groups = n_groups,
+  lift_metric = lift_metric,
+  image_path = file.path(heart_sensitivity_image_dir, heart_image_file("k_rule_sensitivity_lift.png"))
+)
+
+k_rule_sensitivity_results <- k_rule_sensitivity_analysis$results
+k_rule_sensitivity_plot <- k_rule_sensitivity_analysis$plot
+k_rule_sensitivity_results
+k_rule_sensitivity_plot
+```
+
+Update Results Summary
+```{r, warning=FALSE, message=FALSE}
+heart_results_section_id <- dplyr::case_when(
+  ANALYSIS_CHOICE == 1 ~ "heart_rate_rmse",
+  ANALYSIS_CHOICE == 2 ~ "heart_rate_winkler_score",
+  ANALYSIS_CHOICE == 3 ~ "heart_rate_crps",
+  TRUE ~ "heart_rate_other"
+)
+
+heart_results_title <- dplyr::case_when(
+  ANALYSIS_CHOICE == 1 ~ "Heart Rate: Point-Forecast Residuals (ANALYSIS_CHOICE = 1)",
+  ANALYSIS_CHOICE == 2 ~ "Heart Rate: Winkler Score (ANALYSIS_CHOICE = 2)",
+  ANALYSIS_CHOICE == 3 ~ "Heart Rate: CRPS (ANALYSIS_CHOICE = 3)",
+  TRUE ~ paste("Heart Rate: Analysis Choice", ANALYSIS_CHOICE)
+)
+
+tree_alert_update_results_summary(
+  output_path = file.path(if (dir.exists("TA_functions")) "." else "..", "Results", "TreeAlert_results_summary.md"),
+  section_id = heart_results_section_id,
+  title = heart_results_title,
+  analysis_choice = ANALYSIS_CHOICE,
+  analysis_target = analysis_target_label,
+  formula = final_formula,
+  n_groups = n_groups,
+  n_rules = n_rules,
+  minute_increment = minute_increment,
+  train_set = train_set,
+  test_set = test_set,
+  best_params = best_params,
+  train_lift = best_train$lift,
+  test_lift = best_test$lift,
+  performance_summary = performance_summary,
+  rule_text_output = rule_text_output,
+  rule_coverage = rule_coverage,
+  sensitivity_results = sensitivity_results,
+  split_sensitivity_results = split_sensitivity_results,
+  feature_sensitivity_results = feature_sensitivity_results,
+  k_rule_sensitivity_results = k_rule_sensitivity_results,
+  image_outputs = data.frame(
+    output = c(
+      "train_lift", "test_lift", "visualization",
+      "hyperparameter_train", "hyperparameter_test",
+      "split_train", "split_test",
+      "feature_granularity", "k_rule"
+    ),
+    path = c(
+      file.path(heart_image_dir, heart_image_file("lift_train.png")),
+      file.path(heart_image_dir, heart_image_file("lift_test.png")),
+      file.path(heart_image_dir, heart_image_file("viz.png")),
+      file.path(heart_sensitivity_image_dir, heart_image_file("sensitivity_train_lift.png")),
+      file.path(heart_sensitivity_image_dir, heart_image_file("sensitivity_test_lift.png")),
+      file.path(heart_sensitivity_image_dir, heart_image_file("split_sensitivity_train_lift.png")),
+      file.path(heart_sensitivity_image_dir, heart_image_file("split_sensitivity_test_lift.png")),
+      file.path(heart_sensitivity_image_dir, heart_image_file("feature_sensitivity_lift.png")),
+      file.path(heart_sensitivity_image_dir, heart_image_file("k_rule_sensitivity_lift.png"))
+    )
+  )
+)
 ```

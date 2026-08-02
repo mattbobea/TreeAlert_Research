@@ -108,7 +108,7 @@ organizational viability and public safety.
 
 Periods with high-risk of extreme forecast failure present a particular challenge for decision-makers because the reliability of forecasts may degrade under certain conditions, directly undermining the quality of forecast-driven decisions. For example, in emergency medical services operations, demand behavior is influenced not only by the month, day of the week, or hour of  day, but also by contextual information such as weather, population age, and the effect of special days \citep{abreu2023}. When these high risk periods are overlooked, forecasts can fail during critical periods.
 
-Identifying extreme failures conditions allows managers to mitigate risks associated with potential failures, set realistic expectations for a forecasting model's performance, and better communicate the model's reliability and applicability to stakeholders \citep{cakmak2024}. Identifying temporal and contextual predictors could help managers understand when (and possibly why) extreme failures take place, and help them make proactive adjustments during periods of elevated risk. For data scientists, identifying extreme failure patterns can highlight areas where the model requires further refinement, such as incorporating additional training data, feature engineering, or model adjustments \citep{cakmak2024}. 
+Identifying extreme failures conditions allows managers to mitigate risks associated with potential failures, set realistic expectations for a forecasting model's performance, and better communicate the model's reliability and applicability to stakeholders \citep{cakmak2024}. Identifying temporal and contextual predictors can help managers understand when (and possibly why) extreme failures take place, and help them make proactive adjustments during periods of elevated risk. For data scientists, identifying extreme failure patterns can highlight areas where the model requires further refinement, such as incorporating additional training data, feature engineering, or model adjustments \citep{cakmak2024}. 
 
 It is challenging to identify risky periods in which extreme forecast failures are likely, because these patterns can be obscured by noise, anomalies, high-dimensional feature spaces, irregular seasonal structures, or the scale and complexity of big data environments. This complexity makes them difficult to detect without data-driven methods. Patterns of extreme forecast failures may arise due to structural complexities in the data or the model’s failure to capture regime shifts. For instance, complex seasonal patterns and excessive zero values can contribute to extreme errors. Additionally, models that adjust slowly following very high or low values may produce patterns of extreme errors. Patterns of extreme errors can occur even when standard forecasting models, such as smoothing algorithms, ARIMA and %models, 
 regression models, or more complex neural networks, are properly employed. Current time series forecasting approaches can struggle to detect extreme failures due to data complexity, visualization limitations, and inadequate metrics. Fine-grained data can amplify noise, while aggregation might smooth over systematic errors, obscuring failure patterns. Automated forecasting tools often focus on minimizing some overall error metric, overlooking extreme failure patterns. Traditional error metrics like RMSE %and MAPE %will 
@@ -296,7 +296,7 @@ Given these varied scenarios, effective failure prediction methods must capture 
 
 \spacingset{1.75} % DON'T change the spacing!
 
-\subsection{Implications of Extreme Forecasts Failures}
+\subsection{Implications of Extreme Forecast Failures}
 
 \subsubsection{Extreme Failure Patterns During Peaks and Dips}
 
@@ -1079,7 +1079,7 @@ $-534.00$  & The model over-forecasts by an average of 534 when Day of Week is S
 \section{Sensitivity Analysis}
 \label{appendix:sensitivity}
 
-We conduct three sensitivity analyses to examine whether TreeAlert's lift performance depends on particular modeling choices. First, we vary the regression-tree hyperparameters used in the grid search: the complexity parameter, minimum bucket size, and maximum tree depth. Second, we vary the temporal training share from 70\% to 90\%, preserving chronological ordering. Third, we vary the temporal feature set used to estimate the tree. In each case, TreeAlert is re-estimated and first-ventile lift is recomputed on the training and test samples.
+We conduct four sensitivity analyses to examine whether TreeAlert's lift performance depends on particular modeling choices. First, we vary the regression-tree hyperparameters used in the grid search: the complexity parameter, minimum bucket size, and maximum tree depth. Second, we vary the temporal training share from 70\% to 90\%, preserving chronological ordering. Third, we vary the temporal feature set used to estimate the tree. Fourth, we vary the number of top-ranked rules retained for alerting. In the first three analyses, TreeAlert is re-estimated and first-ventile lift is recomputed on the training and test samples. In the rule-count analysis, the optimized tree is held fixed and lift is recomputed for observations covered by the top-$k$ terminal-node rules.
 
 Figures~\ref{fig:appendix_elec_hyperparameter_sensitivity} and~\ref{fig:appendix_hr_hyperparameter_sensitivity} report the hyperparameter sensitivity results. The dashed horizontal line denotes the lift obtained by the main specification. The distributions show that lift varies across hyperparameter choices, as expected, but the main specification remains within the range of high-performing alternatives rather than being an isolated result.
 
@@ -1113,7 +1113,7 @@ Figures~\ref{fig:appendix_elec_hyperparameter_sensitivity} and~\ref{fig:appendix
   \label{fig:appendix_hr_hyperparameter_sensitivity}
 \end{figure}
 
-Figures~\ref{fig:appendix_elec_split_sensitivity} and~\ref{fig:appendix_hr_split_sensitivity} evaluate sensitivity to the temporal train-test split. The results indicate that first-ventile lift changes with the amount of data assigned to training, but the method continues to concentrate high-error periods across a range of chronological splits. This analysis addresses whether the reported lift depends on a single arbitrary partition of the time series.
+Figures~\ref{fig:appendix_elec_split_sensitivity} and~\ref{fig:appendix_hr_split_sensitivity} evaluate sensitivity to the temporal train-test split. Although first-ventile lift varies with the amount of data assigned to estimation, it remains between approximately 1.2 and 2.6 across the alternative temporal train-test specifications. This indicates that TreeAlert continues to rank observations with elevated forecast errors above the unconditional benchmark, implying model improvement under each temporal split considered.
 
 \begin{figure}[H]
   \centering
@@ -1160,6 +1160,23 @@ Figure~\ref{fig:appendix_feature_sensitivity} reports sensitivity to temporal fe
   \end{minipage}
   \caption{Feature-granularity sensitivity for electricity demand (left) and heart rate (right).}
   \label{fig:appendix_feature_sensitivity}
+\end{figure}
+
+Figure~\ref{fig:appendix_k_rule_sensitivity} evaluates sensitivity to the number of rules retained after the optimized tree has been estimated. The analysis varies $k$ from 1 to 10 and reports the lift obtained by the observations covered by the corresponding top-$k$ rule set. This assesses whether the alerting performance depends on a single arbitrary choice of rule-count threshold.
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Figures/elec_k_rule_sensitivity_lift.png}
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Figures/hr_k_rule_sensitivity_lift.png}
+  \end{minipage}
+  \caption{Top-$k$ rule-count sensitivity for electricity demand (left) and heart rate (right).}
+  \label{fig:appendix_k_rule_sensitivity}
 \end{figure}
 
 \end{document}
