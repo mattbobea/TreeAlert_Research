@@ -651,7 +651,7 @@ Derived from the timestamps, we create three temporal predictors: minute-of-hour
 
 \paragraph{Step 2 - Data Partitioning:} The series is partitioned using a 75/25 split, where the first three months of the data serve as the training set, and the last month is reserved as the test set. This is visualized in Figure \ref{fig:electricity} where the train/test partition is displayed by a red dashed line.
 
-\paragraph{Step 3 - Regression Tree:} We train a regression tree on the forecast errors as a function of the three temporal predictors. Using lift for hyperparameter tuning, we obtain $n = 5$ and $cp = 0$. These values appear to balance the relatively long series %Because the series has many periods 
+\paragraph{Step 3 - Regression Tree:} We train a regression tree on the forecast errors as a function of the three temporal predictors. Using lift for hyperparameter tuning, we obtain $n = 4$, $cp = 0$, and maximum depth $=8$. These values appear to balance the relatively long series %Because the series has many periods 
 (2,119 periods of 15-min buckets) with many patterns of extreme errors. %, we set $n = 5$ and $cp = 0$. 
 %We can 
 %(If we increase these values, TreeAlert will identify additional patterns of errors per rule at the risk of flagging more non-extreme periods.)
@@ -674,39 +674,39 @@ average error magnitudes.
 
 \begin{tabular}{|c|m{2.2cm}|m{11cm}|}
 \hline
- & \textbf{Source} & \textbf{Rule} \\
+& \textbf{Source} & \textbf{Rule} \\
 \hline
 
 \multirow{2}{*}{\Large\textcolor{violet}{$\bullet$}}
 & Regression Tree Rule
-& 4861.59 when Weekday is Sun or Mon \& Hour is 17 or 18 \newline\& Minute is~0 \\
+& 4292.65 when Weekday is Sun or Mon \& Hour is 17 or 18 \& Minute is 0 or 45 \\
 \cdashline{2-3}
 & Interpretation
-& \textit{The model under forecasts when Weekday is Sunday through Monday, Hours 5PM--6PM and Minute is 0 through 14.} \\
+& \textit{The model under-forecasts by an average of 4293 when Day of Week is Sunday through Monday, Hour is 5PM--6PM, and Minute is 0 through 14 and 45 through 59.} \\
 \hline
 
 \multirow{2}{*}{\Large\textcolor[rgb]{0.0,0.6,0.0}{$\bullet$}}
 & Regression Tree Rule
-& 4041.32 when Weekday is Tue or Wed or Thu or Fri or Sat \& Hour is 17 or 18 or 19 \& Minute is 15 or 30 \\
+& 4251.77 when Weekday is Tue or Wed or Thu or Fri or Sat \& Hour is 17 or 18 or 19 \& Minute is 15 \\
 \cdashline{2-3}
 & Interpretation
-& \textit{The model under forecasts when Weekday is Tuesday through Saturday, Hours 5PM--7PM and Minute is 15 through 44.} \\
+& \textit{The model under-forecasts by an average of 4252 when Day of Week is Tuesday through Saturday, Hour is 5PM--7PM, and Minute is 15 through 29.} \\
 \hline
 
 \multirow{2}{*}{\Large\textcolor{blue}{$\bullet$}}
 & Regression Tree Rule
-& 5857.96 when Weekday is Sun or Mon or Tue or Wed \newline\& Hour is 2 or 12 \& Minute is 15 or 30 \\
+& 3626.57 when Weekday is Sun or Mon or Tue or Wed \& Hour is 2 or 12 \& Minute is 15 or 30 \\
 \cdashline{2-3}
 & Interpretation
-& \textit{The model under forecasts when Weekday is Sunday through Wednesday, Hours 2AM and 12PM and Minute is 15 through 44.} \\
+& \textit{The model under-forecasts by an average of 3627 when Day of Week is Sunday through Wednesday, Hour is 2AM and 12PM, and Minute is 15 through 44.} \\
 \hline
 
 \multirow{2}{*}{\Large\textcolor{orange}{$\bullet$}}
 & Regression Tree Rule
-& 3796.82 when Weekday is Sun or Mon \& Hour is 19 \& \newline Minute is 0 \\
+& 3469.76 when Weekday is Sun or Mon \& Hour is 19 \& Minute is 0 or 45 \\
 \cdashline{2-3}
 & Interpretation
-& \textit{The model under forecasts when Weekday is Sunday through Monday, Hour 7PM and Minute is 0 through 14.} \\
+& \textit{The model under-forecasts by an average of 3470 when Day of Week is Sunday through Monday, Hour is 7PM, and Minute is 0 through 14 and 45 through 59.} \\
 \hline
 
 \end{tabular}
@@ -730,7 +730,7 @@ Each resulting rule is translated using the interpretation module (see Table \re
 \paragraph{Step 7 - Evaluating Predictive Performance:}
 
 \matt{%TreeAlert targets recurring failure patterns rather than isolated events. 
-Table~\ref{tab:elec_performance} summarizes predictive performance across  training and test sets. Figures~\ref{fig:elec_lift_test} present a ventile lift charts using 20 equal-sized groups. The test lift of 1.32 confirms that flagged periods concentrate errors approximately 32\% above the global average. The close alignment between training and test lift indicates that the identified patterns generalize out-of-sample.}
+Table~\ref{tab:elec_performance} summarizes predictive performance across  training and test sets. Figures~\ref{fig:elec_lift_test} present ventile lift charts using 20 equal-sized groups. The test lift of 1.38 confirms that flagged periods concentrate errors approximately 38\% above the global average. The close alignment between training and test lift indicates that the identified patterns generalize out-of-sample.}
 
 % Recall that TreeAlert aims at capturing patterns of extreme errors, not single events. TreeAlert flagged 33 of 2,119 training periods and 16 of 696 test periods as potential extreme errors. Figures~\ref{fig:elec_lift_test} present ventile %quantile 
 % lift charts using 20 %25  
@@ -748,8 +748,8 @@ Table~\ref{tab:elec_performance} summarizes predictive performance across  train
 \toprule
 \textbf{Set} & \textbf{Flagged Periods} & \textbf{Total Periods} & \textbf{\% Flagged} & \textbf{First-ventile lift} \\
 \midrule
-Training & 33 & 2,119 & 1.6\% & 1.74 \\
-Test     & 16 & 696   & 2.3\% & 1.32 \\
+Training & 49 & 2,119 & 2.3\% & 1.69 \\
+Test     & 17 & 696   & 2.4\% & 1.38 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1070,7 +1070,7 @@ $-534.00$  & The model over-forecasts by an average of 534 when Day of Week is S
 
 \begin{figure}[ht]
   \centering
-  \includegraphics[width=1\linewidth]{Figures/Elec_3x3_both.png}
+  \includegraphics[width=0.84\linewidth]{Figures/Elec_3x3_both.png}
   \caption{Example of TreeAlert retaining both positive and negative mean error rules.}
   \label{fig:3x3}
 \end{figure}
@@ -1079,18 +1079,18 @@ $-534.00$  & The model over-forecasts by an average of 534 when Day of Week is S
 \section{Sensitivity Analysis}
 \label{appendix:sensitivity}
 
-We conduct four sensitivity analyses to examine whether TreeAlert's lift performance depends on particular modeling choices. First, we vary the regression-tree hyperparameters used in the grid search: the complexity parameter, minimum bucket size, and maximum tree depth. Second, we vary the temporal training share from 70\% to 90\%, preserving chronological ordering. Third, we vary the temporal feature set used to estimate the tree. Fourth, we vary the number of top-ranked rules retained for alerting. In the first three analyses, TreeAlert is re-estimated and first-ventile lift is recomputed on the training and test samples. In the rule-count analysis, the optimized tree is held fixed and lift is recomputed for observations covered by the top-$k$ terminal-node rules.
+We conduct five sensitivity analyses to examine whether TreeAlert's lift performance depends on particular modeling choices. First, we vary the regression-tree hyperparameters one at a time around the specification selected by grid search: the complexity parameter, minimum bucket size, and maximum tree depth. Second, we vary the temporal training share from 70\% to 90\%, preserving chronological ordering. Third, we vary the temporal feature set used to estimate the tree. Fourth, we vary the number of top-ranked rules retained for alerting. Fifth, we vary Lift's top quantile size, from the top 1\% to the top 10\% of ranked observations. In the first three analyses, TreeAlert is re-estimated and first-ventile lift is recomputed on the training and test samples. In the rule-count analysis, the optimized tree is held fixed and lift is recomputed for observations covered by the top-$k$ terminal-node rules. In the quantile-size analysis, hyperparameters are selected by maximizing \(\mathrm{Lift}(g_1)\) under each candidate top-quantile size.
 
-Figures~\ref{fig:appendix_elec_hyperparameter_sensitivity} and~\ref{fig:appendix_hr_hyperparameter_sensitivity} report the hyperparameter sensitivity results. The dashed horizontal line denotes the lift obtained by the main specification. The distributions show that lift varies across hyperparameter choices, as expected, but the main specification remains within the range of high-performing alternatives rather than being an isolated result.
+Figures~\ref{fig:appendix_elec_hyperparameter_sensitivity} and~\ref{fig:appendix_hr_hyperparameter_sensitivity} report one-at-a-time hyperparameter sensitivity. For each panel, two hyperparameters are held at the grid-search values used in the main specification, while the remaining hyperparameter is varied over its candidate grid. Each plotted point is the first-ventile lift from the tree estimated under that configuration; the connecting line shows the local sensitivity profile. In Figures~13--16, the dashed horizontal line denotes the first-ventile lift obtained under the main specification.
 
 \begin{figure}[H]
   \centering
-  \begin{minipage}{0.48\linewidth}
+  \begin{minipage}{0.49\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Figures/elec_sensitivity_train_lift.png}
   \end{minipage}
   \hfill
-  \begin{minipage}{0.48\linewidth}
+  \begin{minipage}{0.49\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Figures/elec_sensitivity_test_lift.png}
   \end{minipage}
@@ -1100,12 +1100,12 @@ Figures~\ref{fig:appendix_elec_hyperparameter_sensitivity} and~\ref{fig:appendix
 
 \begin{figure}[H]
   \centering
-  \begin{minipage}{0.48\linewidth}
+  \begin{minipage}{0.49\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Figures/hr_sensitivity_train_lift.png}
   \end{minipage}
   \hfill
-  \begin{minipage}{0.48\linewidth}
+  \begin{minipage}{0.49\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Figures/hr_sensitivity_test_lift.png}
   \end{minipage}
@@ -1113,7 +1113,7 @@ Figures~\ref{fig:appendix_elec_hyperparameter_sensitivity} and~\ref{fig:appendix
   \label{fig:appendix_hr_hyperparameter_sensitivity}
 \end{figure}
 
-Figures~\ref{fig:appendix_elec_split_sensitivity} and~\ref{fig:appendix_hr_split_sensitivity} evaluate sensitivity to the temporal train-test split. Although first-ventile lift varies with the amount of data assigned to estimation, it remains between approximately 1.2 and 2.6 across the alternative temporal train-test specifications. This indicates that TreeAlert continues to rank observations with elevated forecast errors above the unconditional benchmark, implying model improvement under each temporal split considered.
+Figures~\ref{fig:appendix_elec_split_sensitivity} and~\ref{fig:appendix_hr_split_sensitivity} evaluate sensitivity to the temporal train-test split. Although first-ventile lift varies with the amount of data assigned to estimation, electricity lift remains above 1.5 in training and 1.0 in testing, whereas heart-rate lift remains above 2.0 in both samples across the evaluated temporal partitions. Thus, TreeAlert continues to rank observations with elevated forecast errors above the unconditional benchmark under each split considered.
 
 \begin{figure}[H]
   \centering
@@ -1145,22 +1145,38 @@ Figures~\ref{fig:appendix_elec_split_sensitivity} and~\ref{fig:appendix_hr_split
   \label{fig:appendix_hr_split_sensitivity}
 \end{figure}
 
-Figure~\ref{fig:appendix_feature_sensitivity} reports sensitivity to temporal feature granularity. The feature sets are intentionally restricted to combinations that preserve meaningful temporal ordering. For example, specifications that include minute-of-hour also include hour-of-day, avoiding combinations such as minute and weekday without hour. The results provide a check on whether the reported lift depends on one particular temporal encoding.
+Table~\ref{tab:appendix_feature_sensitivity} reports sensitivity to temporal feature granularity. The feature sets are intentionally restricted to combinations that preserve meaningful temporal ordering. For example, specifications that include minute-of-hour also include hour-of-day, avoiding combinations such as minute and weekday without hour. The results provide a check on whether the reported lift depends on one particular temporal encoding.
 
-\begin{figure}[H]
-  \centering
-  \begin{minipage}{0.49\linewidth}
-    \centering
-    \includegraphics[width=\linewidth]{Figures/elec_feature_sensitivity_lift.png}
-  \end{minipage}
-  \hfill
-  \begin{minipage}{0.49\linewidth}
-    \centering
-    \includegraphics[width=\linewidth]{Figures/hr_feature_sensitivity_lift.png}
-  \end{minipage}
-  \caption{Feature-granularity sensitivity for electricity demand (left) and heart rate (right).}
-  \label{fig:appendix_feature_sensitivity}
-\end{figure}
+{\spacingset{1}
+\begin{samepage}
+\begin{center}
+\captionof{table}{Feature-granularity sensitivity for electricity demand and heart rate}
+\label{tab:appendix_feature_sensitivity}
+{\small
+\renewcommand{\arraystretch}{1}
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}Xcc@{}}
+\toprule
+\textbf{Application} & \textbf{Feature specification} & \textbf{Training lift} & \textbf{Test lift} \\
+\midrule
+\multirow{8}{*}{Electricity} & Hour & 1.11 & 1.06 \\
+ & Minute + Hour & 1.39 & 1.17 \\
+ & Hour + Weekday & 1.63 & 1.36 \\
+ & Minute + Hour + Weekday & 1.69 & 1.38 \\
+ & Weekday + Month & 1.81 & 1.30 \\
+ & Minute + Hour + Month & 1.78 & 1.08 \\
+ & Hour + Weekday + Month & 2.06 & 1.34 \\
+ & Minute + Hour + Weekday + Month & 2.06 & 1.34 \\
+\addlinespace
+\multirow{4}{*}{Heart rate} & Hour & 1.48 & 1.41 \\
+ & Minute + Hour & 1.55 & 1.38 \\
+ & Hour + Weekday & 1.81 & 1.62 \\
+ & Minute + Hour + Weekday & 1.68 & 1.42 \\
+\bottomrule
+\end{tabularx}
+}
+\end{center}
+\end{samepage}
+}
 
 Figure~\ref{fig:appendix_k_rule_sensitivity} evaluates sensitivity to the number of rules retained after the optimized tree has been estimated. The analysis varies $k$ from 1 to 10 and reports the lift obtained by the observations covered by the corresponding top-$k$ rule set. This assesses whether the alerting performance depends on a single arbitrary choice of rule-count threshold.
 
@@ -1177,6 +1193,25 @@ Figure~\ref{fig:appendix_k_rule_sensitivity} evaluates sensitivity to the number
   \end{minipage}
   \caption{Top-$k$ rule-count sensitivity for electricity demand (left) and heart rate (right).}
   \label{fig:appendix_k_rule_sensitivity}
+\end{figure}
+
+\clearpage
+
+Figure~\ref{fig:appendix_threshold_sensitivity} reports sensitivity to Lift's top quantile size. The x-axis varies this quantile from the top 1\% to the top 10\% of observations ranked by TreeAlert. For each candidate top-quantile size, TreeAlert hyperparameters are selected by maximizing training \(\mathrm{Lift}(g_1)\), and the fitted tree is then evaluated on the test period. Across electricity and heart-rate forecasts, test lift remains above 1 for all quantile sizes considered. The ranking therefore remains informative as the top quantile expands, rather than being driven only by the first-ventile setting.
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Figures/elec_threshold_sensitivity_lift.png}
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Figures/hr_rmse_threshold_sensitivity_lift.png}
+  \end{minipage}
+  \caption{Lift sensitivity to top quantile size: electricity (left), heart rate (right).}
+  \label{fig:appendix_threshold_sensitivity}
 \end{figure}
 
 \end{document}

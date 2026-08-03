@@ -119,6 +119,62 @@ tree_alert_compute_lift_numeric <- function(df,
   df_lift$meanError[df_lift$group == 1]
 }
 
+tree_alert_lift_summary_function <- function(lift_metric = c("mean_abs", "rmse")) {
+  lift_metric <- match.arg(lift_metric)
+  if (lift_metric == "rmse") {
+    function(error) sqrt(mean(error^2, na.rm = TRUE))
+  } else {
+    function(error) mean(abs(error), na.rm = TRUE)
+  }
+}
+
+tree_alert_compute_top_percent_lift_numeric <- function(df,
+                                                        actual_col,
+                                                        pred_col,
+                                                        threshold,
+                                                        lift_metric = c("mean_abs", "rmse")) {
+  lift_metric <- match.arg(lift_metric)
+  if (!is.numeric(threshold) || length(threshold) != 1 ||
+      is.na(threshold) || threshold <= 0 || threshold >= 1) {
+    stop("threshold must be a single number between 0 and 1.")
+  }
+
+  actual <- df[[actual_col]]
+  score <- abs(df[[pred_col]])
+  valid <- is.finite(score) & !is.na(actual)
+  actual <- actual[valid]
+  score <- score[valid]
+  total_count <- length(actual)
+
+  if (total_count == 0) {
+    return(data.frame(
+      selected_count = 0,
+      total_count = 0,
+      percent_selected = NA_real_,
+      lift = NA_real_
+    ))
+  }
+
+  selected_count <- max(1, floor(threshold * total_count))
+  ord <- order(score, decreasing = TRUE)
+  selected_actual <- actual[ord][seq_len(selected_count)]
+  lift_summary <- tree_alert_lift_summary_function(lift_metric)
+  denominator <- lift_summary(actual)
+
+  lift <- if (is.na(denominator) || denominator == 0) {
+    NA_real_
+  } else {
+    lift_summary(selected_actual) / denominator
+  }
+
+  data.frame(
+    selected_count = selected_count,
+    total_count = total_count,
+    percent_selected = selected_count / total_count * 100,
+    lift = lift
+  )
+}
+
 tree_alert_make_lift_chart <- function(df,
                                        actual_col,
                                        pred_col,
@@ -259,6 +315,66 @@ tree_alert_grid_search <- function(train_set,
   list(results = results, best_params = best_params)
 }
 
+tree_alert_threshold_grid_search <- function(train_set,
+                                             formula,
+                                             param_grid,
+                                             threshold,
+                                             actual_col = ".resid",
+                                             pred_col_name = "Pred_Threshold",
+                                             cp_digits = NULL,
+                                             lift_metric = c("mean_abs", "rmse")) {
+  lift_metric <- match.arg(lift_metric)
+
+  evaluate_params <- function(params_row) {
+    cp <- params_row$cp
+    minbucket <- params_row$minbucket
+    maxdepth <- params_row$maxdepth
+
+    model <- rpart::rpart(
+      formula,
+      data = train_set,
+      method = "anova",
+      control = rpart::rpart.control(
+        cp = cp,
+        minbucket = minbucket,
+        maxdepth = maxdepth
+      )
+    )
+
+    train_df <- train_set
+    train_df[[pred_col_name]] <- as.numeric(predict(model, newdata = train_set, type = "vector"))
+
+    lift_value <- tree_alert_compute_top_percent_lift_numeric(
+      df = train_df,
+      actual_col = actual_col,
+      pred_col = pred_col_name,
+      threshold = threshold,
+      lift_metric = lift_metric
+    )$lift
+
+    data.frame(
+      cp = if (is.null(cp_digits)) cp else round(cp, cp_digits),
+      minbucket = as.integer(minbucket),
+      maxdepth = as.integer(maxdepth),
+      threshold_lift = lift_value
+    )
+  }
+
+  results <- do.call(
+    rbind,
+    lapply(seq_len(nrow(param_grid)), function(i) {
+      evaluate_params(param_grid[i, , drop = FALSE])
+    })
+  )
+
+  best_params <- results |>
+    dplyr::filter(!is.na(threshold_lift)) |>
+    dplyr::arrange(dplyr::desc(threshold_lift)) |>
+    dplyr::slice(1)
+
+  list(results = results, best_params = best_params)
+}
+
 tree_alert_train_best_model <- function(train_set, formula, best_params) {
   rpart::rpart(
     formula,
@@ -269,6 +385,85 @@ tree_alert_train_best_model <- function(train_set, formula, best_params) {
       minbucket = best_params$minbucket,
       maxdepth = best_params$maxdepth
     )
+  )
+}
+
+tree_alert_threshold_lift_sensitivity_analysis <- function(train_set,
+                                                           test_set,
+                                                           formula,
+                                                           param_grid,
+                                                           thresholds = seq(0.01, 0.10, by = 0.01),
+                                                           actual_col = ".resid",
+                                                           pred_col_name = "Pred_Threshold_Sensitivity",
+                                                           lift_metric = c("mean_abs", "rmse"),
+                                                           cp_digits = NULL) {
+  lift_metric <- match.arg(lift_metric)
+  thresholds <- sort(unique(as.numeric(thresholds)))
+  thresholds <- thresholds[!is.na(thresholds) & thresholds > 0 & thresholds < 1]
+  if (length(thresholds) == 0) {
+    stop("thresholds must contain at least one value between 0 and 1.")
+  }
+
+  do.call(
+    rbind,
+    lapply(thresholds, function(threshold) {
+      grid_search <- tree_alert_threshold_grid_search(
+        train_set = train_set,
+        formula = formula,
+        param_grid = param_grid,
+        threshold = threshold,
+        actual_col = actual_col,
+        pred_col_name = pred_col_name,
+        cp_digits = cp_digits,
+        lift_metric = lift_metric
+      )
+
+      best_model <- tree_alert_train_best_model(
+        train_set = train_set,
+        formula = formula,
+        best_params = grid_search$best_params
+      )
+
+      threshold_train <- train_set
+      threshold_train[[pred_col_name]] <- as.numeric(
+        predict(best_model, newdata = train_set, type = "vector")
+      )
+
+      threshold_test <- test_set
+      threshold_test[[pred_col_name]] <- as.numeric(
+        predict(best_model, newdata = test_set, type = "vector")
+      )
+
+      train_lift <- tree_alert_compute_top_percent_lift_numeric(
+        df = threshold_train,
+        actual_col = actual_col,
+        pred_col = pred_col_name,
+        threshold = threshold,
+        lift_metric = lift_metric
+      )
+      test_lift <- tree_alert_compute_top_percent_lift_numeric(
+        df = threshold_test,
+        actual_col = actual_col,
+        pred_col = pred_col_name,
+        threshold = threshold,
+        lift_metric = lift_metric
+      )
+
+      data.frame(
+        threshold_percent = threshold * 100,
+        cp = grid_search$best_params$cp,
+        minbucket = grid_search$best_params$minbucket,
+        maxdepth = grid_search$best_params$maxdepth,
+        train_selected = train_lift$selected_count,
+        train_total = train_lift$total_count,
+        train_percent_selected = train_lift$percent_selected,
+        train_lift = train_lift$lift,
+        test_selected = test_lift$selected_count,
+        test_total = test_lift$total_count,
+        test_percent_selected = test_lift$percent_selected,
+        test_lift = test_lift$lift
+      )
+    })
   )
 }
 
@@ -289,10 +484,141 @@ tree_alert_lift_axis_breaks <- function(x, step = 0.1) {
   seq(limits[1], limits[2], by = step)
 }
 
+tree_alert_lift_axis_breaks_adaptive <- function(x,
+                                                 step = 0.1,
+                                                 max_breaks = 8,
+                                                 pretty_n = 6) {
+  regular_breaks <- tree_alert_lift_axis_breaks(x, step)
+  if (length(regular_breaks) <= max_breaks) {
+    return(regular_breaks)
+  }
+
+  limits <- tree_alert_lift_axis_limits(x, step)
+  pretty_breaks <- scales::breaks_pretty(n = pretty_n)(limits)
+  pretty_breaks[pretty_breaks >= limits[1] & pretty_breaks <= limits[2]]
+}
+
+tree_alert_lift_axis_settings <- function(x,
+                                          fixed_limits = NULL,
+                                          fixed_break_interval = 0.5) {
+  if (is.null(fixed_limits)) {
+    return(list(
+      limits = tree_alert_lift_axis_limits(x),
+      breaks = tree_alert_lift_axis_breaks_adaptive(x)
+    ))
+  }
+
+  if (!is.numeric(fixed_limits) ||
+      length(fixed_limits) != 2 ||
+      any(is.na(fixed_limits)) ||
+      fixed_limits[1] >= fixed_limits[2]) {
+    stop("fixed_limits must be a numeric vector of length 2 with increasing values.")
+  }
+
+  if (!is.numeric(fixed_break_interval) ||
+      length(fixed_break_interval) != 1 ||
+      is.na(fixed_break_interval) ||
+      fixed_break_interval <= 0) {
+    stop("fixed_break_interval must be a single positive number.")
+  }
+
+  list(
+    limits = fixed_limits,
+    breaks = seq(fixed_limits[1], fixed_limits[2], by = fixed_break_interval)
+  )
+}
+
+tree_alert_threshold_lift_sensitivity_plot <- function(threshold_results,
+                                                       image_path = NULL,
+                                                       width = 7,
+                                                       height = 4.2,
+                                                       dpi = 1000) {
+  required_cols <- c("threshold_percent", "train_lift", "test_lift")
+  missing_cols <- setdiff(required_cols, names(threshold_results))
+  if (length(missing_cols) > 0) {
+    stop(
+      "threshold_results is missing required columns: ",
+      paste(missing_cols, collapse = ", ")
+    )
+  }
+
+  plot_data <- rbind(
+    data.frame(
+      threshold_percent = threshold_results$threshold_percent,
+      set = "Training",
+      lift = threshold_results$train_lift
+    ),
+    data.frame(
+      threshold_percent = threshold_results$threshold_percent,
+      set = "Test",
+      lift = threshold_results$test_lift
+    )
+  )
+
+  plot_data$set <- factor(plot_data$set, levels = c("Training", "Test"))
+  x_breaks <- sort(unique(plot_data$threshold_percent))
+
+  threshold_plot <- ggplot2::ggplot(
+    plot_data,
+    ggplot2::aes(
+      x = threshold_percent,
+      y = lift,
+      color = set,
+      shape = set,
+      group = set
+    )
+  ) +
+    ggplot2::geom_line(linewidth = 0.55) +
+    ggplot2::geom_point(size = 2.6, stroke = 0.8, fill = "white") +
+    ggplot2::scale_color_manual(values = c("Training" = "grey25", "Test" = "#B2182B")) +
+    ggplot2::scale_shape_manual(values = c("Training" = 21, "Test" = 24)) +
+    ggplot2::scale_x_continuous(
+      breaks = x_breaks,
+      labels = function(x) paste0(scales::number(x, accuracy = 1), "%")
+    ) +
+    ggplot2::scale_y_continuous(
+      breaks = tree_alert_lift_axis_breaks_adaptive(plot_data$lift),
+      labels = scales::label_number(accuracy = 0.1)
+    ) +
+    ggplot2::labs(
+      x = "Lift's top quantile size",
+      y = "Lift",
+      color = NULL,
+      shape = NULL
+    ) +
+    ggplot2::theme_bw(base_size = 15) +
+    ggplot2::theme(
+      panel.grid.minor = ggplot2::element_blank(),
+      legend.position = "inside",
+      legend.position.inside = c(0.98, 0.98),
+      legend.justification = c(1, 1),
+      legend.background = ggplot2::element_rect(
+        fill = ggplot2::alpha("white", 0.85),
+        color = "grey70",
+        linewidth = 0.25
+      ),
+      legend.key = ggplot2::element_rect(fill = ggplot2::alpha("white", 0)),
+      axis.text.x = ggplot2::element_text(angle = 0, hjust = 0.5)
+    )
+
+  if (!is.null(image_path)) {
+    ggplot2::ggsave(
+      image_path,
+      plot = threshold_plot,
+      width = width,
+      height = height,
+      dpi = dpi
+    )
+  }
+
+  threshold_plot
+}
+
 tree_alert_sensitivity_analysis <- function(train_set,
                                             test_set,
                                             formula,
                                             param_grid,
+                                            fixed_params = NULL,
                                             n_groups = 20,
                                             actual_col = ".resid",
                                             pred_col_name = "Pred_Sensitivity",
@@ -303,13 +629,62 @@ tree_alert_sensitivity_analysis <- function(train_set,
                                             test_image_path = NULL,
                                             width = 8,
                                             height = 4.0,
-                                            dpi = 1000) {
+                                            dpi = 1000,
+                                            lift_axis_limits = c(1, 3),
+                                            lift_axis_break_interval = 0.5) {
   lift_metric <- match.arg(lift_metric)
+  parameter_names <- c("cp", "minbucket", "maxdepth")
+  missing_params <- setdiff(parameter_names, names(param_grid))
+  if (length(missing_params) > 0) {
+    stop("param_grid is missing required columns: ", paste(missing_params, collapse = ", "))
+  }
+
+  if (is.null(fixed_params)) {
+    fixed_params <- param_grid[1, parameter_names, drop = FALSE]
+  }
+
+  missing_fixed <- setdiff(parameter_names, names(fixed_params))
+  if (length(missing_fixed) > 0) {
+    stop("fixed_params is missing required columns: ", paste(missing_fixed, collapse = ", "))
+  }
+
+  fixed_params <- fixed_params[1, parameter_names, drop = FALSE]
+
+  format_sensitivity_value <- function(parameter, value) {
+    if (parameter == "cp") {
+      return(formatC(as.numeric(value), format = "fg", digits = 6))
+    }
+
+    as.character(as.integer(value))
+  }
+
+  sensitivity_param_grid <- do.call(
+    rbind,
+    lapply(parameter_names, function(parameter) {
+      values <- sort(unique(param_grid[[parameter]]))
+
+      do.call(
+        rbind,
+        lapply(values, function(value) {
+          params <- fixed_params
+          params[[parameter]] <- value
+          data.frame(
+            parameter = parameter,
+            value = value,
+            cp = params$cp,
+            minbucket = as.integer(params$minbucket),
+            maxdepth = as.integer(params$maxdepth),
+            stringsAsFactors = FALSE
+          )
+        })
+      )
+    })
+  )
 
   sensitivity_results <- do.call(
     rbind,
-    lapply(seq_len(nrow(param_grid)), function(i) {
-      params <- param_grid[i, , drop = FALSE]
+    lapply(seq_len(nrow(sensitivity_param_grid)), function(i) {
+      params <- sensitivity_param_grid[i, , drop = FALSE]
 
       sensitivity_model <- rpart::rpart(
         formula,
@@ -333,6 +708,8 @@ tree_alert_sensitivity_analysis <- function(train_set,
       )
 
       data.frame(
+        parameter = params$parameter,
+        value = params$value,
         cp = params$cp,
         minbucket = params$minbucket,
         maxdepth = params$maxdepth,
@@ -354,21 +731,27 @@ tree_alert_sensitivity_analysis <- function(train_set,
     })
   )
 
-  parameter_value_levels <- c(
-    paste("cp", sort(unique(sensitivity_results$cp)), sep = "__"),
-    paste("minbucket", sort(unique(sensitivity_results$minbucket)), sep = "__"),
-    paste("maxdepth", sort(unique(sensitivity_results$maxdepth)), sep = "__")
+  parameter_value_levels <- unlist(
+    lapply(parameter_names, function(parameter) {
+      values <- sort(unique(param_grid[[parameter]]))
+      paste(
+        parameter,
+        vapply(
+          values,
+          function(value) format_sensitivity_value(parameter, value),
+          character(1)
+        ),
+        sep = "__"
+      )
+    }),
+    use.names = FALSE
   )
 
   sensitivity_plot_data <- sensitivity_results |>
-    tidyr::pivot_longer(
-      cols = c(cp, minbucket, maxdepth),
-      names_to = "parameter",
-      values_to = "value"
-    ) |>
     dplyr::mutate(
+      value_label = mapply(format_sensitivity_value, parameter, value),
       value = factor(
-        paste(parameter, value, sep = "__"),
+        paste(parameter, value_label, sep = "__"),
         levels = parameter_value_levels
       ),
       parameter = factor(
@@ -379,31 +762,56 @@ tree_alert_sensitivity_analysis <- function(train_set,
     )
 
   make_sensitivity_plot <- function(y_col, y_label, reference_lift = NULL) {
+    y_values <- sensitivity_plot_data[[y_col]]
+    if (!is.null(reference_lift)) {
+      y_values <- c(y_values, reference_lift)
+    }
+    lift_axis <- tree_alert_lift_axis_settings(
+      y_values,
+      fixed_limits = lift_axis_limits,
+      fixed_break_interval = lift_axis_break_interval
+    )
+
     sensitivity_plot <- ggplot2::ggplot(
       sensitivity_plot_data,
       ggplot2::aes(x = value, y = .data[[y_col]])
-    ) +
-      ggplot2::geom_boxplot(
-        width = 0.65,
-        fill = "grey92",
-        color = "grey20",
-        outlier.shape = 21,
-        outlier.fill = "white",
-        outlier.color = "grey20",
-        outlier.size = 1.8
+    )
+
+    if (!is.null(reference_lift)) {
+      sensitivity_plot <- sensitivity_plot +
+        ggplot2::geom_hline(
+          yintercept = reference_lift,
+          color = "#B2182B",
+          linetype = "dashed",
+          linewidth = 0.55
+        )
+    }
+
+    sensitivity_plot <- sensitivity_plot +
+      ggplot2::geom_line(
+        ggplot2::aes(group = 1),
+        color = "grey30",
+        linewidth = 0.45
+      ) +
+      ggplot2::geom_point(
+        shape = 21,
+        size = 2.2,
+        stroke = 0.45,
+        fill = "white",
+        color = "grey20"
       ) +
       ggplot2::facet_wrap(~ parameter, scales = "free_x", nrow = 1) +
       ggplot2::scale_x_discrete(labels = function(x) sub("^.*__", "", x)) +
       ggplot2::scale_y_continuous(
-        limits = tree_alert_lift_axis_limits,
-        breaks = tree_alert_lift_axis_breaks,
+        breaks = lift_axis$breaks,
         labels = scales::label_number(accuracy = 0.1)
       ) +
+      ggplot2::coord_cartesian(ylim = lift_axis$limits) +
       ggplot2::labs(
-        x = NULL,
+        x = "Hyperparameter Value",
         y = y_label
       ) +
-      ggplot2::theme_bw(base_size = 13) +
+      ggplot2::theme_bw(base_size = 15) +
       ggplot2::theme(
         panel.grid.major.x = ggplot2::element_blank(),
         panel.grid.minor = ggplot2::element_blank(),
@@ -411,16 +819,6 @@ tree_alert_sensitivity_analysis <- function(train_set,
         strip.text = ggplot2::element_text(face = "bold"),
         axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)
       )
-
-    if (!is.null(reference_lift)) {
-      sensitivity_plot <- sensitivity_plot +
-        ggplot2::geom_hline(
-          yintercept = reference_lift,
-          linetype = "dashed",
-          color = "#B2182B",
-          size = 0.45
-        )
-    }
 
     sensitivity_plot
   }
@@ -523,13 +921,16 @@ tree_alert_split_sensitivity_analysis <- function(data,
                                                   train_share_min = 70,
                                                   train_share_max = 90,
                                                   train_share_step = 1,
+                                                  train_share_axis_step = 5,
                                                   reference_train_lift = NULL,
                                                   reference_test_lift = NULL,
                                                   train_image_path = NULL,
                                                   test_image_path = NULL,
                                                   width = 8,
                                                   height = 4.2,
-                                                  dpi = 1000) {
+                                                  dpi = 1000,
+                                                  lift_axis_limits = c(1, 3),
+                                                  lift_axis_break_interval = 0.5) {
   lift_metric <- match.arg(lift_metric)
 
   split_data <- as.data.frame(data)
@@ -544,8 +945,20 @@ tree_alert_split_sensitivity_analysis <- function(data,
   if (train_share_min > train_share_max) {
     stop("train_share_min must be less than or equal to train_share_max.")
   }
+  if (!is.numeric(train_share_axis_step) ||
+      length(train_share_axis_step) != 1 ||
+      is.na(train_share_axis_step) ||
+      train_share_axis_step <= 0) {
+    stop("train_share_axis_step must be a single positive number.")
+  }
 
   target_train_shares <- seq(train_share_min, train_share_max, by = train_share_step)
+  x_axis_breaks <- seq(
+    ceiling(train_share_min / train_share_axis_step) * train_share_axis_step,
+    floor(train_share_max / train_share_axis_step) * train_share_axis_step,
+    by = train_share_axis_step
+  )
+  x_axis_breaks <- sort(unique(c(train_share_min, x_axis_breaks, train_share_max)))
 
   split_grid <- data.frame(
     target_train_share = target_train_shares,
@@ -611,41 +1024,53 @@ tree_alert_split_sensitivity_analysis <- function(data,
   )
 
   make_split_plot <- function(y_col, y_label, reference_lift = NULL) {
+    y_values <- split_results[[y_col]]
+    if (!is.null(reference_lift)) {
+      y_values <- c(y_values, reference_lift)
+    }
+    lift_axis <- tree_alert_lift_axis_settings(
+      y_values,
+      fixed_limits = lift_axis_limits,
+      fixed_break_interval = lift_axis_break_interval
+    )
+
     split_plot <- ggplot2::ggplot(
       split_results,
       ggplot2::aes(x = train_share, y = .data[[y_col]])
-    ) +
-      ggplot2::geom_line(color = "grey30", linewidth = 0.45) +
-      ggplot2::geom_point(shape = 21, size = 2.2, fill = "grey92", color = "grey20") +
-      ggplot2::scale_x_continuous(
-        limits = c(train_share_min, train_share_max),
-        breaks = seq(train_share_min, train_share_max, by = train_share_step),
-        labels = function(x) paste0(round(x, 1), "%")
-      ) +
-      ggplot2::scale_y_continuous(
-        limits = tree_alert_lift_axis_limits,
-        breaks = tree_alert_lift_axis_breaks,
-        labels = scales::label_number(accuracy = 0.1)
-      ) +
-      ggplot2::labs(
-        x = "Training Share",
-        y = y_label
-      ) +
-      ggplot2::theme_bw(base_size = 13) +
-      ggplot2::theme(
-        panel.grid.minor = ggplot2::element_blank(),
-        axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)
-      )
+    )
 
     if (!is.null(reference_lift)) {
       split_plot <- split_plot +
         ggplot2::geom_hline(
           yintercept = reference_lift,
-          linetype = "dashed",
           color = "#B2182B",
-          size = 0.45
+          linetype = "dashed",
+          linewidth = 0.55
         )
     }
+
+    split_plot <- split_plot +
+      ggplot2::geom_line(color = "grey30", linewidth = 0.45) +
+      ggplot2::geom_point(shape = 21, size = 2.2, fill = "grey92", color = "grey20") +
+      ggplot2::scale_x_continuous(
+        limits = c(train_share_min, train_share_max),
+        breaks = x_axis_breaks,
+        labels = function(x) paste0(scales::number(x, accuracy = 1), "%")
+      ) +
+      ggplot2::scale_y_continuous(
+        breaks = lift_axis$breaks,
+        labels = scales::label_number(accuracy = 0.1)
+      ) +
+      ggplot2::coord_cartesian(ylim = lift_axis$limits) +
+      ggplot2::labs(
+        x = "Training Share",
+        y = y_label
+      ) +
+      ggplot2::theme_bw(base_size = 15) +
+      ggplot2::theme(
+        panel.grid.minor = ggplot2::element_blank(),
+        axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)
+      )
 
     split_plot
   }
@@ -691,6 +1116,7 @@ tree_alert_feature_sensitivity_analysis <- function(train_set,
                                                     reference_train_lift = NULL,
                                                     reference_test_lift = NULL,
                                                     image_path = NULL,
+                                                    make_plot = !is.null(image_path),
                                                     width = 7,
                                                     height = 4.2,
                                                     dpi = 1000) {
@@ -760,75 +1186,81 @@ tree_alert_feature_sensitivity_analysis <- function(train_set,
     levels = rev(names(feature_formulas))
   )
 
-  feature_plot_data <- feature_results |>
-    tidyr::pivot_longer(
-      cols = c(train_lift, test_lift),
-      names_to = "set",
-      values_to = "lift"
-    ) |>
-    dplyr::mutate(
-      set = factor(
-        set,
-        levels = c("train_lift", "test_lift"),
-        labels = c("Training", "Test")
-      )
-    )
-  feature_plot <- ggplot2::ggplot(
-    feature_plot_data,
-    ggplot2::aes(x = lift, y = specification, color = set)
-  ) +
-    ggplot2::geom_vline(
-      xintercept = 1,
-      linetype = "dotted",
-      color = "grey45",
-      size = 0.4
-    ) +
-    ggplot2::geom_segment(
-      data = feature_results,
-      ggplot2::aes(
-        x = train_lift,
-        xend = test_lift,
-        y = specification,
-        yend = specification
-      ),
-      inherit.aes = FALSE,
-      color = "grey70",
-      size = 0.35
-    ) +
-    ggplot2::geom_path(ggplot2::aes(group = set), linewidth = 0.45) +
-    ggplot2::geom_point(ggplot2::aes(shape = set), size = 2.4, show.legend = FALSE) +
-    ggplot2::scale_color_manual(values = c("Training" = "grey20", "Test" = "#B2182B")) +
-    ggplot2::scale_shape_manual(values = c("Training" = 16, "Test" = 17), guide = "none") +
-    ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = c(0.02, 0.08))) +
-    ggplot2::scale_y_discrete(expand = ggplot2::expansion(add = 0.45)) +
-    ggplot2::labs(
-      x = "First-Ventile Lift",
-      y = "Feature Specification",
-      color = NULL
-    ) +
-    ggplot2::theme_bw(base_size = 13) +
-    ggplot2::theme(
-      panel.grid.minor = ggplot2::element_blank(),
-      legend.position = "inside",
-      legend.position.inside = c(0.97, 0.97),
-      legend.justification = c(1, 1),
-      legend.background = ggplot2::element_rect(
-        fill = ggplot2::alpha("white", 0.9),
-        color = "grey80",
-        linewidth = 0.25
-      ),
-      legend.key = ggplot2::element_rect(fill = ggplot2::alpha("white", 0)),
-      axis.text.y = ggplot2::element_text(hjust = 1)
-    )
+  make_plot <- isTRUE(make_plot) || !is.null(image_path)
+  feature_plot <- NULL
 
-  if (!is.null(image_path)) {
-    ggplot2::ggsave(
-      image_path,
-      plot = feature_plot,
-      width = width,
-      height = height,
-      dpi = dpi
-    )
+  if (make_plot) {
+    feature_plot_data <- feature_results |>
+      tidyr::pivot_longer(
+        cols = c(train_lift, test_lift),
+        names_to = "set",
+        values_to = "lift"
+      ) |>
+      dplyr::mutate(
+        set = factor(
+          set,
+          levels = c("train_lift", "test_lift"),
+          labels = c("Training", "Test")
+        )
+      )
+
+    feature_plot <- ggplot2::ggplot(
+      feature_plot_data,
+      ggplot2::aes(x = lift, y = specification, color = set)
+    ) +
+      ggplot2::geom_vline(
+        xintercept = 1,
+        linetype = "dotted",
+        color = "grey45",
+        size = 0.4
+      ) +
+      ggplot2::geom_segment(
+        data = feature_results,
+        ggplot2::aes(
+          x = train_lift,
+          xend = test_lift,
+          y = specification,
+          yend = specification
+        ),
+        inherit.aes = FALSE,
+        color = "grey70",
+        size = 0.35
+      ) +
+      ggplot2::geom_path(ggplot2::aes(group = set), linewidth = 0.45) +
+      ggplot2::geom_point(ggplot2::aes(shape = set), size = 2.4, show.legend = FALSE) +
+      ggplot2::scale_color_manual(values = c("Training" = "grey20", "Test" = "#B2182B")) +
+      ggplot2::scale_shape_manual(values = c("Training" = 16, "Test" = 17), guide = "none") +
+      ggplot2::scale_x_continuous(expand = ggplot2::expansion(mult = c(0.02, 0.08))) +
+      ggplot2::scale_y_discrete(expand = ggplot2::expansion(add = 0.45)) +
+      ggplot2::labs(
+        x = "First-Ventile Lift",
+        y = "Feature Specification",
+        color = NULL
+      ) +
+      ggplot2::theme_bw(base_size = 13) +
+      ggplot2::theme(
+        panel.grid.minor = ggplot2::element_blank(),
+        legend.position = "inside",
+        legend.position.inside = c(0.97, 0.97),
+        legend.justification = c(1, 1),
+        legend.background = ggplot2::element_rect(
+          fill = ggplot2::alpha("white", 0.9),
+          color = "grey80",
+          linewidth = 0.25
+        ),
+        legend.key = ggplot2::element_rect(fill = ggplot2::alpha("white", 0)),
+        axis.text.y = ggplot2::element_text(hjust = 1)
+      )
+
+    if (!is.null(image_path)) {
+      ggplot2::ggsave(
+        image_path,
+        plot = feature_plot,
+        width = width,
+        height = height,
+        dpi = dpi
+      )
+    }
   }
 
   list(
@@ -915,6 +1347,36 @@ tree_alert_k_rule_sensitivity_analysis <- function(train_set,
     })
   )
 
+  k_plot <- tree_alert_k_rule_sensitivity_plot(
+    k_results = k_results,
+    image_path = image_path,
+    width = width,
+    height = height,
+    dpi = dpi
+  )
+
+  list(
+    results = k_results,
+    plot = k_plot
+  )
+}
+
+tree_alert_k_rule_sensitivity_plot <- function(k_results,
+                                               image_path = NULL,
+                                               width = 7,
+                                               height = 4.2,
+                                               dpi = 1000) {
+  required_cols <- c("k", "train_lift", "test_lift")
+  missing_cols <- setdiff(required_cols, names(k_results))
+  if (length(missing_cols) > 0) {
+    stop(
+      "k_results is missing required columns: ",
+      paste(missing_cols, collapse = ", ")
+    )
+  }
+
+  k_values <- sort(unique(as.integer(k_results$k)))
+
   k_plot_data <- k_results |>
     tidyr::pivot_longer(
       cols = c(train_lift, test_lift),
@@ -931,12 +1393,13 @@ tree_alert_k_rule_sensitivity_analysis <- function(train_set,
 
   k_plot <- ggplot2::ggplot(
     k_plot_data,
-    ggplot2::aes(x = k, y = lift, color = set)
+    ggplot2::aes(x = k, y = lift, color = set, shape = set, group = set)
   ) +
     ggplot2::geom_hline(yintercept = 1, linetype = "dotted", color = "grey55", linewidth = 0.4) +
     ggplot2::geom_line(linewidth = 0.55) +
-    ggplot2::geom_point(shape = 21, size = 2.3, fill = "white", stroke = 0.8) +
+    ggplot2::geom_point(size = 2.3, fill = "white", stroke = 0.8) +
     ggplot2::scale_color_manual(values = c("Training" = "grey25", "Test" = "#B2182B")) +
+    ggplot2::scale_shape_manual(values = c("Training" = 21, "Test" = 24)) +
     ggplot2::scale_x_continuous(breaks = k_values) +
     ggplot2::scale_y_continuous(
       breaks = scales::breaks_pretty(n = 6),
@@ -945,12 +1408,14 @@ tree_alert_k_rule_sensitivity_analysis <- function(train_set,
     ggplot2::labs(
       x = "Number of Rules (k)",
       y = "Top-k Rule Lift",
-      color = NULL
+      color = NULL,
+      shape = NULL
     ) +
     ggplot2::theme_bw(base_size = 13) +
     ggplot2::theme(
       panel.grid.minor = ggplot2::element_blank(),
-      legend.position = c(0.98, 0.98),
+      legend.position = "inside",
+      legend.position.inside = c(0.98, 0.98),
       legend.justification = c(1, 1),
       legend.background = ggplot2::element_rect(fill = ggplot2::alpha("white", 0.8), color = "grey70"),
       legend.key = ggplot2::element_rect(fill = ggplot2::alpha("white", 0)),
@@ -967,10 +1432,7 @@ tree_alert_k_rule_sensitivity_analysis <- function(train_set,
     )
   }
 
-  list(
-    results = k_results,
-    plot = k_plot
-  )
+  k_plot
 }
 
 tree_alert_sort_rules_by_resid <- function(tree_rules,
@@ -1268,6 +1730,7 @@ tree_alert_update_results_summary <- function(output_path,
                                               split_sensitivity_results = NULL,
                                               feature_sensitivity_results = NULL,
                                               k_rule_sensitivity_results = NULL,
+                                              threshold_sensitivity_results = NULL,
                                               image_outputs = NULL) {
   timestamp <- format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")
 
@@ -1358,11 +1821,14 @@ tree_alert_update_results_summary <- function(output_path,
     "### Train/Test Split Sensitivity Results",
     tree_alert_markdown_table(split_sensitivity_results),
     "",
-    "### Feature Granularity Sensitivity Results",
+    "### Feature Specification Sensitivity Results",
     tree_alert_markdown_table(feature_sensitivity_results),
     "",
     "### K-Rule Sensitivity Results",
     tree_alert_markdown_table(k_rule_sensitivity_results),
+    "",
+    "### Quantile Threshold Sensitivity Results",
+    tree_alert_markdown_table(threshold_sensitivity_results),
     "",
     "### Image Outputs",
     tree_alert_markdown_table(image_outputs)

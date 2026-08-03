@@ -5,7 +5,7 @@ date: "2024-02-03"
 output: html_document
 ---
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-##                      TreeAlert Heart Rate Example                         
+##                TreeAlert Heart Rate Probabilistic Example                 
 ##~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 Libraries
 ```{r, include=FALSE, warning=FALSE, message=FALSE}
@@ -21,12 +21,8 @@ source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", 
 
 Configuration
 ```{r}
-# Point-forecast residual analysis.
-# Probabilistic-score analyses are in Heart_Rate_Probabilistic_Main.Rmd.
-analysis_choice_label <- "point_forecast"
-analysis_target_label <- "Forecast Error"
-lift_metric <- "rmse"
-heart_output_prefix <- "hr_rmse"
+# Choose probabilistic score target: "winkler_score" or "crps".
+PROB_SCORE <- "winkler_score"
 
 n_groups <- 20
 n_rules <- 3
@@ -48,18 +44,52 @@ Load Data
 heart_dir <- if (dir.exists("Heart_Rate")) "Heart_Rate" else "."
 heart_image_dir <- file.path(heart_dir, "images")
 heart_sensitivity_image_dir <- file.path(heart_image_dir, "sensitivity")
+heart_output_prefix <- dplyr::case_when(
+  PROB_SCORE == "winkler_score" ~ "hr_winkler_score",
+  PROB_SCORE == "crps" ~ "hr_crps",
+  TRUE ~ paste0("hr_", PROB_SCORE)
+)
 heart_image_file <- function(filename) {
   paste0(heart_output_prefix, "_", filename)
 }
 dir.create(heart_image_dir, showWarnings = FALSE, recursive = TRUE)
 dir.create(heart_sensitivity_image_dir, showWarnings = FALSE, recursive = TRUE)
 heart_data_1 <- readRDS(file.path(heart_dir, "HR_data", "heart_combined.rds"))
+heart_data_2 <- readRDS(file.path(heart_dir, "HR_data", "heart_new_data.rds"))
 ```
 
 Prepare Data
 ```{r}
-message("Analysis target: original point-forecast residuals with RMSE lift")
-analysis_data <- heart_data_1
+# Merge metrics from heart_data_2 into heart_data_1
+
+analysis_data <- heart_data_1 %>%
+  left_join(
+    heart_data_2 %>%
+      select(
+        Time,
+        crps,
+        winkler_score,
+        lower,
+        upper
+      ),
+    by = "Time"
+  )
+
+if (PROB_SCORE == "winkler_score") {
+  message("Analysis target: winkler_score -> .resid")
+  analysis_target_label <- "Winkler Score"
+} else if (PROB_SCORE == "crps") {
+  message("Analysis target: crps -> .resid")
+  analysis_target_label <- "CRPS"
+} else {
+  stop('Invalid PROB_SCORE. Use "winkler_score" or "crps".')
+}
+
+lift_metric <- "mean_abs"
+analysis_data <- analysis_data %>%
+  select(-.resid) %>%
+  rename(.resid = all_of(PROB_SCORE))
+# .resid is replaced with the selected probabilistic score so downstream code can stay shared.
 
 # ============================================================
 # Train / Test split (85 / 15)
@@ -486,11 +516,23 @@ threshold_lift_sensitivity_plot
 
 Update Results Summary
 ```{r, warning=FALSE, message=FALSE}
+heart_results_section_id <- dplyr::case_when(
+  PROB_SCORE == "winkler_score" ~ "heart_rate_winkler_score",
+  PROB_SCORE == "crps" ~ "heart_rate_crps",
+  TRUE ~ paste0("heart_rate_", PROB_SCORE)
+)
+
+heart_results_title <- dplyr::case_when(
+  PROB_SCORE == "winkler_score" ~ "Heart Rate: Winkler Score",
+  PROB_SCORE == "crps" ~ "Heart Rate: CRPS",
+  TRUE ~ paste("Heart Rate:", PROB_SCORE)
+)
+
 tree_alert_update_results_summary(
   output_path = file.path(if (dir.exists("TA_functions")) "." else "..", "Results", "TreeAlert_results_summary.md"),
-  section_id = "heart_rate_rmse",
-  title = "Heart Rate: Point-Forecast Residuals",
-  analysis_choice = analysis_choice_label,
+  section_id = heart_results_section_id,
+  title = heart_results_title,
+  analysis_choice = PROB_SCORE,
   analysis_target = analysis_target_label,
   formula = final_formula,
   n_groups = n_groups,
