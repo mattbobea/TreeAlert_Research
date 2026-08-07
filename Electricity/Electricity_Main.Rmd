@@ -49,6 +49,14 @@ test_end <- data_end
 n_groups <- 20
 n_rules <- 4
 minute_increment <- 15
+run_sensitivity_analysis <- 1L  # Set to 0L to skip all sensitivity analyses.
+
+# Initialized so the results summary still runs when sensitivity analysis is off.
+sensitivity_results <- NULL
+split_sensitivity_results <- NULL
+feature_sensitivity_results <- NULL
+k_rule_sensitivity_results <- NULL
+threshold_lift_sensitivity_results <- NULL
 
 baseline_formula <- .resid ~ Minute + Hour + Weekday
 final_formula <- .resid ~ Hour + Minute + Weekday
@@ -225,31 +233,28 @@ bottom_5_percent_value <- bottom_5_percent[[1]]
 ```
 Baseline Tree
 ```{r}
-#------------Regression tree on .resid + temporal variables------------
-tree_model <- rpart(baseline_formula,
-                    data = train_set, method = "anova", 
-                    cp = 0.0000, minbucket = 5)
-tree_rules <- rpart.rules(tree_model, cover = FALSE, digits = 4, nn = FALSE)
-
-#Attached the predicted tree nodes to DF and Maps rules/leafs to Observations
-leaf_nodes <- predict(tree_model, newdata = analysis_data, type = "vector")
-analysis_data_with_leaf <- dplyr::bind_cols(analysis_data, Leaf_Node = leaf_nodes)
+# Disabled baseline tree. Retained for reference only.
+# tree_model <- rpart(baseline_formula,
+#                     data = train_set, method = "anova",
+#                     cp = 0.0000, minbucket = 5)
+# tree_rules <- rpart.rules(tree_model, cover = FALSE, digits = 4, nn = FALSE)
+# leaf_nodes <- predict(tree_model, newdata = analysis_data, type = "vector")
+# analysis_data_with_leaf <- dplyr::bind_cols(analysis_data, Leaf_Node = leaf_nodes)
 ```
 
 Lift Charts
 ```{r}
-train_results <- tree_alert_compute_lift(
-  train_set, tree_model, "Leaf_Node", "Baseline (Train)",
-  plot = TRUE, n_groups = n_groups,
-  lift_label = "First Ventile",
-  axis_title_size = 24, axis_text_x_size = 24, axis_text_y_size = 24
-)
-test_results <- tree_alert_compute_lift(
-  test_set, tree_model, "Leaf_Node", "Baseline (Test)",
-  plot = TRUE, n_groups = n_groups,
-  lift_label = "First Ventile",
-  axis_title_size = 24, axis_text_x_size = 24, axis_text_y_size = 24
-)
+# Disabled baseline lift charts. Retained for reference only.
+# train_results <- tree_alert_compute_lift(
+#   train_set, tree_model, "Leaf_Node", "Baseline (Train)",
+#   plot = TRUE, n_groups = n_groups, lift_label = "First Ventile",
+#   axis_title_size = 24, axis_text_x_size = 24, axis_text_y_size = 24
+# )
+# test_results <- tree_alert_compute_lift(
+#   test_set, tree_model, "Leaf_Node", "Baseline (Test)",
+#   plot = TRUE, n_groups = n_groups, lift_label = "First Ventile",
+#   axis_title_size = 24, axis_text_x_size = 24, axis_text_y_size = 24
+# )
 ```
 
 Grid Search
@@ -664,7 +669,7 @@ performance_summary <- tree_alert_performance_summary(
 ```
 
 Sensitivity Analysis
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=run_sensitivity_analysis == 1L}
 sensitivity_analysis <- tree_alert_sensitivity_analysis(
   train_set = train_set,
   test_set = test_set,
@@ -686,7 +691,7 @@ sensitivity_test_plot
 ```
 
 Train/Test Split Sensitivity Analysis
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=run_sensitivity_analysis == 1L}
 split_sensitivity_analysis <- tree_alert_split_sensitivity_analysis(
   data = analysis_data,
   formula = final_formula,
@@ -709,7 +714,7 @@ split_sensitivity_test_plot
 ```
 
 Feature Specification Sensitivity Results
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=run_sensitivity_analysis == 1L}
 feature_sensitivity_analysis <- tree_alert_feature_sensitivity_analysis(
   train_set = train_set,
   test_set = test_set,
@@ -734,7 +739,7 @@ feature_sensitivity_results
 ```
 
 K-Rule Sensitivity Analysis
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=run_sensitivity_analysis == 1L}
 k_rule_sensitivity_analysis <- tree_alert_k_rule_sensitivity_analysis(
   train_set = train_set,
   test_set = test_set,
@@ -753,7 +758,7 @@ k_rule_sensitivity_plot
 ```
 
 Quantile Threshold Sensitivity Analysis
-```{r, warning=FALSE, message=FALSE}
+```{r, warning=FALSE, message=FALSE, eval=run_sensitivity_analysis == 1L}
 threshold_lift_sensitivity_results <- tree_alert_threshold_lift_sensitivity_analysis(
   train_set = train_set,
   test_set = test_set,

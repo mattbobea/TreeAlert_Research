@@ -4,6 +4,7 @@
 \usepackage{enumerate}
 \usepackage{natbib}
 \usepackage{url} % not crucial - just used below for the URL 
+\urlstyle{same}
 
 % Additional packages (kept from original manuscript)
 \usepackage{algorithm}
@@ -24,7 +25,7 @@
 % NOTE: To produce blinded version, replace "0" with "1" below.
 \newcommand{\blind}{0}
 \newcommand{\galit}[1]{\textcolor{black}{#1}}
-\newcommand{\matt}[1]{\textcolor{black}{#1}}
+\newcommand{\matt}[1]{\textcolor{red}{#1}}
 
 % DON'T change margins - should be 1 inch all around.
 \addtolength{\oddsidemargin}{-.5in}%
@@ -131,7 +132,7 @@ Prediction errors play a central role in both retrospective and prospective mode
 
 Literature on \emph{error analysis} examines prediction errors to gain insights into model behavior, weaknesses, and  generalization capabilities \citep{cakmak2024}. %Traditional 
 Error analysis in machine learning focuses on %\emph{binary} 
-\emph{categorical} errors, such as false alarms or missed detections, and is most commonly applied to cross-sectional data. By contrast, forecasting errors are \emph{continuous numeric} outcomes, structured in time, and influenced by temporal and contextual dependencies. Moreover, traditional error analysis is largely \emph{retrospective}—identifying the sources and drivers of model error after the fact \citep{cakmak2024}. \matt{It focuses on quantifying error magnitude \citep{kim2020}, characterizing uncertainty through prediction intervals \citep{salem2020}, or developing early warning systems for imminent events \citep{shmueli2010}, rather than predicting when future failures will occur. This represents a critical gap we address.}
+\emph{categorical} errors, such as false alarms or missed detections, and is most commonly applied to cross-sectional data. By contrast, forecasting errors are \emph{continuous numeric} outcomes, structured in time, and influenced by temporal and contextual dependencies. Moreover, traditional error analysis is largely \emph{retrospective}—identifying the sources and drivers of model error after the fact \citep{cakmak2024}. It focuses on quantifying error magnitude \citep{kim2020}, characterizing uncertainty through prediction intervals \citep{salem2020}, or developing early warning systems for imminent events \citep{shmueli2010}, rather than predicting when future failures will occur. This represents a critical gap we address.
 %removed aguirre2018 from citep salem2020
 
 A second and more consequential gap concerns \emph{timing}. While the forecasting literature extensively studies error magnitude, it offers little guidance on \emph{when} extreme errors are likely to occur. Anticipating the timing of extreme errors is critical in many domains, enabling advance preparation, resource allocation, and risk mitigation. Examples include healthcare staffing, inventory planning, energy system operations, and emergency response. Yet, existing methods rarely address this prospective question.
@@ -150,6 +151,7 @@ values}. Isolated anomalies rarely reveal the conditions under which future fail
 
 Our approach differs by being explicitly \emph{prospective} and \emph{pattern-driven}. We define a \emph{pattern} as a configuration of temporal and/or contextual variables that repeatedly predicts extreme forecast errors. Temporal predictors capture time-based structure (e.g., hour of day, day of week), while contextual predictors capture exogenous conditions such as promotions, special events, or weather. For example, a failure pattern may take the form “Wednesdays at 8:00 PM during promotional events.” Rather than detecting one-off deviations, our goal is to forecast when a model is likely to fail under recurring conditions, enabling improvements in model design and decision-making. Accordingly, an important principle for methods that predict extreme forecasting errors is to focus on patterns rather than individual anomalous events.
 
+\clearpage
 {\spacingset{1}
 \vspace{0.6cm}
 \noindent
@@ -203,7 +205,7 @@ In early event detection, we might analyze emerging patterns of unusually high p
 \subsection{Why Patterns of Extreme Forecast Failures Arise}%:\newline
 %Five Scenarios}
 
-\matt{Designing a method to predict extreme model failures requires first identifying the conditions under which they arise. This ensures that the method targets generalizable structural patterns rather than isolated anomalies. We define an extreme forecasting failure as a large forecast error magnitude without imposing a fixed threshold.  Such failures frequently coincide with peaks or dips in a series \citep{marvin2022}, but also emerge under routine conditions such as sparse data or slow model adaptation. Each distinct drivers carry different operational implications and costs. We therefore identify and examine five scenarios that commonly exhibit patterns of extreme forecasting failures.}
+Designing a method to predict extreme model failures requires first identifying the conditions under which they arise. This ensures that the method targets generalizable structural patterns rather than isolated anomalies. We define an extreme forecasting failure as a large forecast error magnitude without imposing a fixed threshold.  Such failures frequently coincide with peaks or dips in a series \citep{marvin2022}, but also emerge under routine conditions such as sparse data or slow model adaptation. Each distinct drivers carry different operational implications and costs. We therefore identify and examine five scenarios that commonly exhibit patterns of extreme forecasting failures.
 
 %Designing a method to predict extreme model failures requires first identifying the conditions under which such failures arise. Identifying  these conditions ensures that the method targets generalizable structural  patterns rather than isolated anomalies. We define an extreme forecasting failure as a large forecast error magnitude without imposing a fixed threshold.  Although extreme failures often occur during peaks or dips in a series  \citep{marvin2022}, they are not confined to these periods. Extreme failures may also arise under routine conditions such as sparse data or slow model adaptation. These distinct drivers carry different operational implications and costs. We therefore identify and examine five scenarios that commonly exhibit patterns of extreme forecasting failures.
 
@@ -227,7 +229,7 @@ how a misaligned holiday at times $t_1$ and $t_2$ can lead to recurring extreme 
 
 \begin{scenario}{Scenario C: Capturing spurious signals}
 
-\matt{Noise or outliers in the training data can lead a model overfit an irrelevant pattern in the training data (as shown in Figure~1(C)) and hinder the model's ability to learn meaningful patterns \citep{cakmak2024}. For example, early models used to forecast flu cases using Google Flu Trends overfit to irrelevant search terms like ``high school basketball,'' which coincided with flu season but were unrelated to flu cases. This led to erroneous over-forecasts of flu cases \citep{lazer2014}. Models that fit these spurious signals generate extreme errors by predicting nonexistent peaks or dips during otherwise stable periods.}
+Noise or outliers in the training data can lead a model overfit an irrelevant pattern in the training data (as shown in Figure~1(C)) and hinder the model's ability to learn meaningful patterns \citep{cakmak2024}. For example, early models used to forecast flu cases using Google Flu Trends overfit to irrelevant search terms like ``high school basketball,'' which coincided with flu season but were unrelated to flu cases. This led to erroneous over-forecasts of flu cases \citep{lazer2014}. Models that fit these spurious signals generate extreme errors by predicting nonexistent peaks or dips during otherwise stable periods.
 \end{scenario}
 
 %Noise or outliers in the training data can mislead a forecasting model and hinder its ability to learn meaningful patterns \citep{cakmak2024}. In other words, the model might overfit an irrelevant pattern in the training data as shown in Figure~1(C). For example, early models used to forecast flu cases using Google Flu Trends overfit to irrelevant search terms like ``high school basketball,'' which coincided with flu season but were unrelated to flu cases. This led to erroneous over-forecasts of flu cases \citep{lazer2014}. Models that fit spurious signals can cause extreme errors in periods that lack peaks or dips in the series when the model incorrectly forecasts a peak or dip.
@@ -235,8 +237,8 @@ how a misaligned holiday at times $t_1$ and $t_2$ can lead to recurring extreme 
 \begin{scenario}{Scenario D: Sparse data}
 
 Series with many missing or zero values can generate patterns of extreme forecast errors even in the absence of regular peaks or dips. This is common in rare-event series %datasets 
-such as earthquakes or intermittent product demand. Prolonged zero-value periods can lead to over-forecasting during stable periods, while models biased toward zero demand can under-forecast when positive demand resumes \citep{wang2024b}. \matt{This would result in extreme errors during peak or dip periods. Intermittent demand often has regular patterns such as in stock keeping units forecasting \citep{nikolopoulos2021}, as well as irregular patterns %\citep{kaya2020}  ----Removed citation
-such as demand for vehicle spare parts \citep{jiang2021}. These dynamics can produce recurring extreme error patterns, as illustrated in Figure 1(D).}
+such as earthquakes or intermittent product demand. Prolonged zero-value periods can lead to over-forecasting during stable periods, while models biased toward zero demand can under-forecast when positive demand resumes \citep{wang2024b}. This would result in extreme errors during peak or dip periods. Intermittent demand often has regular patterns such as in stock keeping units forecasting \citep{nikolopoulos2021}, as well as irregular patterns %\citep{kaya2020}  ----Removed citation
+such as demand for vehicle spare parts \citep{jiang2021}. These dynamics can produce recurring extreme error patterns, as illustrated in Figure 1(D).
 \end{scenario}
 
 \begin{figure}[h!]
@@ -312,23 +314,23 @@ For example, in supply chain management, disbursed forecast errors allow firms t
 
 \subsubsection{Extreme Failure Patterns During Non-Peaks/Dips}
 %\vspace{-0.2in}
-\matt{Extreme errors that manifest during low variance periods are especially unexpected, and can significantly affect operations. In healthcare, overfitting to spurious correlations (Scenario C) can create false demand spikes, prompting premature mobilization of staff or medical resources. Sparse or intermittent data (Scenario D) can also induce extreme over-forecasts during low-demand periods. %For example, 
+Extreme errors that manifest during low variance periods are especially unexpected, and can significantly affect operations. In healthcare, overfitting to spurious correlations (Scenario C) can create false demand spikes, prompting premature mobilization of staff or medical resources. Sparse or intermittent data (Scenario D) can also induce extreme over-forecasts during low-demand periods. %For example,
 \citet{nikolopoulos2021} identified these risks in other fields: overestimating natural disasters leads to burdensome regulation, while over-forecasting market crashes triggers expensive, redundant hedging. Scenario E illustrates a similar problem through the “ringing effect,” where models %remain 
-are slow to adjust after high-demand events. \citet{Burkom2007} found that forecasting models of emergency room visits continued predicting elevated counts after holidays, leading to overstaffing and unnecessary costs.}
+are slow to adjust after high-demand events. \citet{Burkom2007} found that forecasting models of emergency room visits continued predicting elevated counts after holidays, leading to overstaffing and unnecessary costs.
 
 %As mentioned earlier, extreme forecast errors often coincide with peaks and dips in the series, while non-peak and non-dip periods are assumed to exhibit low variance and consistent behavior. Thus, extreme errors that manifest during these assumedly low variance periods are especially unexpected, and can significantly affect operations. In healthcare, overfitting to spurious correlations can create false demand spikes, prompting premature mobilization of staff, supplies, and vaccines, as described in Scenario C. Scenario E illustrates a similar problem through the “ringing effect,” where models remain slow to adjust after high-demand events. For example, \citet{Burkom2007} found that forecasting models of emergency room visits continued predicting elevated counts after holidays, leading to overstaffing and unnecessary costs. Likewise, \citet{lopez2014} reported that slow adjustment in pharmacy demand forecasts caused both overstocking and shortages. Scenario D highlights how sparse or intermittent data can trigger extreme over-forecasts during low-demand periods. \citet{nikolopoulos2021} notes similar risks in other domains: in natural disasters, overestimating earthquake risk can lead to excessive regulation and financial reserves, while in financial markets, repeated over-forecasts of crashes may trigger costly defensive strategies.
 
 \subsection{The Limitation of Conventional Performance Metrics}
-\matt{Forecasting modelers use metrics such as MAPE and RMSE to benchmark accuracy or define a loss function \citep{petropoulos2022}. Letting $e_t = y_t - F_t$ denote the period-$t$ error, both metrics aggregate over all $T$ periods: 
+Forecasting modelers use metrics such as MAPE and RMSE to benchmark accuracy or define a loss function \citep{petropoulos2022}. Letting $e_t = y_t - F_t$ denote the period-$t$ error, both metrics aggregate over all $T$ periods:
 \begin{equation}
 \text{MAPE} = \frac{1}{T} \sum_{t=1}^{T} \left| \frac{e_t}{y_t} \right| \times 100,
 \qquad
 \text{RMSE} = \sqrt{\frac{1}{T} \sum_{t=1}^{T} e_t^2}.
 \end{equation}
 Because each $e_t$ %enters the sum with 
-has equal weight $\frac{1}{T}$, rare but extreme deviations are diluted by the dominant presence of low-magnitude errors, biasing model selection toward overall accuracy at the expense of high-impact periods.}
+has equal weight $\frac{1}{T}$, rare but extreme deviations are diluted by the dominant presence of low-magnitude errors, biasing model selection toward overall accuracy at the expense of high-impact periods.
 
-\matt{Figure~\ref{fig:Monthly Sales} illustrates this with artificial monthly sales data exhibiting December holiday surges. As Table~\ref{tab:metrics} shows, Model~1 dominates on all global metrics yet fails to capture December peaks; Model~2 captures those peaks but scores worse overall. Recent advances in peak electricity demand forecasting have introduced loss functions to improve prediction accuracy during peak demand periods \citep{nygard2025}. While these approaches enhance model sensitivity to peaks, their evaluation remains anchored to global metrics that do not isolate local performance.}
+Figure~\ref{fig:Monthly Sales} illustrates this with artificial monthly sales data exhibiting December holiday surges. As Table~\ref{tab:metrics} shows, Model~1 dominates on all global metrics yet fails to capture December peaks; Model~2 captures those peaks but scores worse overall. Recent advances in peak electricity demand forecasting have introduced loss functions to improve prediction accuracy during peak demand periods \citep{nygard2025}. While these approaches enhance model sensitivity to peaks, their evaluation remains anchored to global metrics that do not isolate local performance.
 
 %Forecasting modelers use metrics like MAPE and RMSE to benchmark forecast accuracy or define a loss function \citep{petropoulos2022}. However, these metrics aggregate errors across all periods and may obscure poor performance during extreme error periods. This limitation means that models optimized for overall accuracy may still perform poorly in such cases. Take metrics such as MAPE and RMSE, which compute overall error as:
 % \begin{equation}
@@ -421,14 +423,14 @@ Based on the eight principles in Section \ref{subsec-principles}, we developed T
 
 \subsection{Step 1 - Feature Engineering}
 
-\matt{TreeAlert is parsimonious, requires only the error series and its associated timestamps, though additional contextual data can also be incorporated. The first step extracts temporal variables (“predictors”) from the timestamps, thereby creating variables such as the month of the year, day of the week, hour of the day, and holiday/non-holiday. This choice is not trivial. The level and number of created predictors is determined by the length and granularity of the test set (see Step 2) so that we have at least two cycles (and ideally more than two) for each relevant predictor.  For instance, ``month of year'' requires at least two years of monthly data; ``hour of day'' requires at least two days of hourly data.}
+TreeAlert is parsimonious, requires only the error series and its associated timestamps, though additional contextual data can also be incorporated. The first step extracts temporal variables (“predictors”) from the timestamps, thereby creating variables such as the month of the year, day of the week, hour of the day, and holiday/non-holiday. This choice is not trivial. The level and number of created predictors is determined by the length and granularity of the test set (see Step 2) so that we have at least two cycles (and ideally more than two) for each relevant predictor.  For instance, ``month of year'' requires at least two years of monthly data; ``hour of day'' requires at least two days of hourly data.
 
 %TreeAlert is parsimonious as its operation requires only the error series and its associated timestamps, though additional contextual data can be incorporated to enhance analysis. The first step extracts temporal variables (“predictors”) from the timestamps, thereby creating variables such as the month of the year, day of the week, hour of the day, and holiday/non-holiday. This choice is not trivial. The level and number of created predictors is determined by the length and granularity of the test set (see Step 2) so that we have at least two cycles (and ideally more than two) for each relevant predictor. For example, “month of the year” requires at least two years of monthly (or more granular) data, and “hour of day” requires at least two days of hourly (or more granular) data.
 
 \subsection{Step 2 - Data Partitioning}
 
-\matt{Before training the tree model, the forecast error series is divided into training ($y_1, \ldots, y_T$) and test subseries ($y_{T+1}, y_{T+2}, \ldots$). The earlier subseries serves as the training set and is
-used for training and tuning TreeAlert. The subsequent subseries serves as the test set and is used for evaluating TreeAlert's predictive performance \citep{shmueli2024}.}
+Before training the tree model, the forecast error series is divided into training ($y_1, \ldots, y_T$) and test subseries ($y_{T+1}, y_{T+2}, \ldots$). The earlier subseries serves as the training set and is
+used for training and tuning TreeAlert. The subsequent subseries serves as the test set and is used for evaluating TreeAlert's predictive performance \citep{shmueli2024}.
 
 % Before training the tree model, the forecast error series is divided into training  and test subseries. The earlier subseries serves ($y_{T+1}, y_{T+2}, \ldots$)as the training set, and the subsequent subseries ($y_1, \ldots, y_T$)as the test set \citep{shmueli2024}. The training set is used for training and tuning TreeAlert, and the test set is used for evaluating TreeAlert’s predictive performance.
 
@@ -447,16 +449,16 @@ Choosing too many predictors and/or predictors with high cardinality (e.g., day 
 
 In combination with temporal predictors, TreeAlert can also incorporate contextual predictors. These exogenous features are particularly valuable for identifying and predicting error patterns that arise from interactions between the forecasting model and environmental conditions. For example, the contextual predictor ‘sales promotion’ may capture errors that result from peaks and dips. `Lunar New Year' may capture error patterns from complex lunar seasonal patterns. Contextual predictors must be known (or forecastable) at the time the failure prediction is made to ensure they are valid inputs in prospective applications. A contextual predictor that is highly correlated with temporal variables (e.g., `outdoor temperature' and `time of day') or with another contextual predictor (e.g., `number of walked steps' and `exercise intensity') might be redundant. The regression tree will select the most informative predictor and its values to split on.
 
-\matt{Including the series magnitude as a predictor for capturing errors during peaks and dips is infeasible as future magnitudes are unknown at prediction time. Subject to forecast horizon restraints, lagged values provide a viable alternative as they preserve recent magnitude information, respecting temporal constraints, and capture autoregressive structure.}
+Including the series magnitude as a predictor for capturing errors during peaks and dips is infeasible as future magnitudes are unknown at prediction time. Subject to forecast horizon restraints, lagged values provide a viable alternative as they preserve recent magnitude information, respecting temporal constraints, and capture autoregressive structure.
 
 % One might be tempted to include the series' magnitude as a predictor for capturing errors during peaks and dips. However, future magnitudes are unknown at prediction time. Lagged values offer a viable alternative: they preserve recent magnitude information without violating temporal constraints and expose the model's autoregressive structure to infer future error-prone conditions, provided the required forecast horizon and storage overhead can be accommodated.
 
 \subsubsection{Hyperparameter Tuning and Optimization Using Lift}
 \label{sec:tuning_optimization}
 
-\matt{Key hyperparameters include the cost complexity parameter ($cp$), and minimal terminal node size ($n$). Together, they balance under-detection (underfitting) and false detection (overfitting). A small $n$ allows for the identification of nuanced behaviors resulting from temporal and contextual combinations that lead to (possibly few) large errors. A low $cp$ value facilitates more splits in the regression tree, resulting in a more complex model that captures more intricate error patterns. For shorter series or settings with few extreme-error patterns, a smaller $(n, cp)$ improve sensitivity to rare but large errors.}
+Key hyperparameters include the cost complexity parameter ($cp$), and minimal terminal node size ($n$). Together, they balance under-detection (underfitting) and false detection (overfitting). A small $n$ allows for the identification of nuanced behaviors resulting from temporal and contextual combinations that lead to (possibly few) large errors. A low $cp$ value facilitates more splits in the regression tree, resulting in a more complex model that captures more intricate error patterns. For shorter series or settings with few extreme-error patterns, a smaller $(n, cp)$ improve sensitivity to rare but large errors.
 
-\matt{Unlike conventional regression tree applications that optimize a global loss function (e.g., $\min \text{MSE}$), TreeAlert tunes hyperparameters by maximizing \emph{lift} for a continuous outcome. Lift is useful for identifying a subset of records that gives the highest cumulative predicted values \citep{shmueli2024machine}. While lift is typically applied to binary outcomes in classification and risk modeling, TreeAlert computes lift on the magnitude of forecast errors, treating error severity as the outcome of interest. This measures how effectively the model concentrates extreme forecast errors for a targeted high-risk segment of periods relative to a random selection of periods. To calculate lift, observations are ranked by predicted error severity $|\hat{e}_t|$ and partitioned into equal-sized quantile subsets (e.g., deciles or ventiles), each containing \( n_g \) observations. }%Consistent with TreeAlert’s objective of prioritizing the most extreme errors, %evaluation focuses 
+Unlike conventional regression tree applications that optimize a global loss function (e.g., $\min \text{MSE}$), TreeAlert tunes hyperparameters by maximizing \emph{lift} for a continuous outcome. Lift is useful for identifying a subset of records that gives the highest cumulative predicted values \citep{shmueli2024machine}. While lift is typically applied to binary outcomes in classification and risk modeling, TreeAlert computes lift on the magnitude of forecast errors, treating error severity as the outcome of interest. This measures how effectively the model concentrates extreme forecast errors for a targeted high-risk segment of periods relative to a random selection of periods. To calculate lift, observations are ranked by predicted error severity $|\hat{e}_t|$ and partitioned into equal-sized quantile subsets (e.g., deciles or ventiles), each containing \( n_g \) observations. %Consistent with TreeAlert’s objective of prioritizing the most extreme errors, %evaluation focuses
 %old
 % Key hyperparameters include the cost complexity parameter ($cp$), and minimal terminal node size ($n$). Together, they balance under-detection (underfitting) and false detection (overfitting). A small $n$ allows for the identification of nuanced behaviors resulting from temporal and contextual combinations that lead to (possibly few) large errors. A low $cp$ value facilitates more splits in the regression tree, resulting in a more complex model that captures more intricate error patterns. When dealing with shorter time series or fewer patterns of extreme errors, a smaller $n$ and a $cp$ close to zero  more effectively capture these limited patterns.
 
@@ -464,7 +466,7 @@ In combination with temporal predictors, TreeAlert can also incorporate contextu
 
 % To calculate lift, observations are ranked according to the magnitude of their predicted error severity $|\hat{e}_t|$. They are then partitioned into equal-sized quantile subsets (e.g., deciles or ventiles), each containing \( n_g \) observations. Consistent with TreeAlert’s objective of prioritizing the most extreme errors, %evaluation focuses 
 
-\matt{To calculate lift, observations are ranked by predicted error severity $|\hat{e}_t|$. They are then partitioned into equal-sized quantile subsets (e.g., deciles or ventiles), each containing \( n_g \) observations. Consistent with TreeAlert’s objective of prioritizing the most extreme errors, we focus on lift computed for the highest-ranked subset, denoted \( g_{1} \), which contains the observations with the largest predicted error severity. Let \( n_{g_1} \) denote the number of observations in the highest-ranked subset \( g_{1} \). Once this subset is formed, lift measures the ratio between the average error magnitude within this subset (MAE of $g_1$) and the average  error magnitude across the full %evaluation 
+Consistent with TreeAlert’s objective of prioritizing the most extreme errors, we focus on lift computed for the highest-ranked subset, denoted \( g_{1} \), which contains the observations with the largest predicted error severity. Let \( n_{g_1} \) denote the number of observations in the highest-ranked subset \( g_{1} \). Once this subset is formed, lift measures the ratio between the average error magnitude within this subset (MAE of $g_1$) and the average  error magnitude across the full %evaluation
 period (overall MAE).\footnote{For hyperparameter tuning the full period is the training period; for evaluation, we use the test period.} Lift therefore measures the degree to which this subset concentrates extreme errors relative to the full %evaluation 
 period. Using \( T \) to denote the total number of observations in the full %evaluation 
 period, we compute lift for subset \( g_{1} \) as:
@@ -478,14 +480,14 @@ period, we compute lift for subset \( g_{1} \) as:
 } = \frac{MAE_{g_1}}{MAE}.
 \end{equation}
 When error magnitude translates directly into meaningful cost units (e.g., lost revenues or wasted resource units), $\text{Lift}(g_1)$ quantifies the concentration of loss captured by TreeAlert's rules relative to not using rules. Maximizing lift thus prioritizes operationally critical failure periods over overall predictive 
-accuracy.} %average 
+accuracy. %average
 %predictive accuracy. A formal definition of lift for a continuous error outcome, along with the corresponding expression used in our optimization and evaluation, is provided in Section~\ref{Sup-A}. 
 
 \subsubsection{Extension to Probabilistic Forecasting}
 
 While point forecasts are extremely popular in practice, there has been a move towards probabilistic forecasts in academia. TreeAlert can be used in either scenario. When predictive intervals or distributions are available, extremeness is defined using a probabilistic loss function, and TreeAlert is trained on the resulting scores in place of point-forecast errors. This allows TreeAlert to identify patterns of systematically poor probabilistic performance, such as intervals that are excessively wide or fail to achieve nominal coverage. 
 
-In the following we briefly describe what is a probabilistic forecast and how TreeAlert is modified for probabilistic forecasts. An illustration of such a usage applied to the heart-rate series can be found in  \cite{probabilistic_treealert}.
+In the following we briefly describe what is a probabilistic forecast and how TreeAlert is modified for probabilistic forecasts. An illustration of such a usage applied to the heart-rate series can be found in Appendix~\ref{probabilistic_treealert}.
 
 \paragraph{Probabilistic Loss Function}
 Let $F_t$ denote the predictive distribution at time $t$, and let $y_t$ denote the observed value.
@@ -554,7 +556,7 @@ Managers would choose the smallest $k$ that gives sufficient lift, ensuring that
 \subsection{Step 5 - Rule Visualization}
 \label{subsec-step5}
 
-\matt{Figure~\ref{fig:VizDemo} illustrates TreeAlert's visualization output using three weeks of Luxembourg's electricity demand. The top-$k$ rules ($k$=2) are overlaid on both the actual/forecast series (top panel) and the error series (bottom panel), with flagged periods marked as color-coded circles. Each flagged point in the error panel corresponds to the same period in the series panel. The absence of flagged errors for a particular peak or dip in the error plot may be due to errors not associated with a recurring pattern, a corresponding failure condition whose terminal node's mean error is diluted by non-extreme errors, or missing temporal or contextual predictors that are needed to capture the underlying failure pattern}
+Figure~\ref{fig:VizDemo} illustrates TreeAlert's visualization output using three weeks of Luxembourg's electricity demand. The top-$k$ rules ($k$=2) are overlaid on both the actual/forecast series (top panel) and the error series (bottom panel), with flagged periods marked as color-coded circles. Each flagged point in the error panel corresponds to the same period in the series panel. The absence of flagged errors for a particular peak or dip in the error plot may be due to errors not associated with a recurring pattern, a corresponding failure condition whose terminal node's mean error is diluted by non-extreme errors, or missing temporal or contextual predictors that are needed to capture the underlying failure pattern
 
 
 %Figure \ref{fig:VizDemo} shows an example of how TreeAlert visualizes failures. We overlay the top-$k$ most extreme error rules on a time plot %(line chart) 
@@ -568,8 +570,8 @@ Managers would choose the smallest $k$ that gives sufficient lift, ensuring that
 
 %\FloatBarrier
 \subsection{Step 6 - Interpretation}
-\matt{We develop a deterministic interpretation module that converts extracted rules (e.g., from \texttt{rpart.rules}) into predictive alerts by aligning rule logic with the data encoding and the algorithm’s behavior\footnote{We also explored LLM-based rephrasing, but found outputs inconsistent, raising concerns about reliability and transparency; we therefore adopt a deterministic procedure.}. Extracted rules present three issues. First, rules may overlap because only inclusion conditions are reported, omitting exclusions implied by upstream splits. 
-or example, consider:}
+We develop a deterministic interpretation module that converts extracted rules (e.g., from \texttt{rpart.rules}) into predictive alerts by aligning rule logic with the data encoding and the algorithm’s behavior. \matt{We also evaluated LLM-based rephrasing as an alternative. In trial rephrasings, the LLM occasionally changed the meaning of rule conditions or omitted important quantitative details. These errors raised concerns about reproducibility and faithful representation. We therefore use the rule-based interpretation module for all reported analyses.} Extracted rules present three issues. First, rules may overlap because only inclusion conditions are reported, omitting exclusions implied by upstream splits.
+or example, consider:
 
 {\spacingset{1}
 \begin{itemize}
@@ -579,11 +581,11 @@ or example, consider:}
     \item[(R1)] \textit{``Mean error = 33.4 when hour is 5 or 16 and DayofWeek is Sun or Mon or Tues''}
     \item[(R2)] \textit{``Mean error = 16.2 when hour is 5 or 16 and DayofWeek is Sun or Mon''}
 \end{itemize}}
-\matt{Inspection of the underlying tree reveals that R1 implicitly includes the exclusion \textit{``DayofWeek is NOT Sun or Mon''}. Our algorithm uses the training data to recover such exclusions, rewriting R1 as \textit{``DayofWeek is Tues''}, thereby producing non-overlapping rules. Second, rule phrasing can hinder interpretation by reflecting observation-level or-conditions rather than the forecasting algorithm’s behavior. R2 indicates failures at 5:00 \emph{or} 16:00 on Sunday \emph{or} Monday, but for decision-making should be interpreted as the algorithm being prone to failure at both 5:00 and 16:00 on Sundays and Mondays. Third, predictor values may be misleading without knowledge of the data’s temporal resolution. For instance, “Minute is 10 or 20” \galit{means} %corresponds to 
-failure over 10–29 minute intervals, not discrete minutes.}
+Inspection of the underlying tree reveals that R1 implicitly includes the exclusion \textit{``DayofWeek is NOT Sun or Mon''}. Our algorithm uses the training data to recover such exclusions, rewriting R1 as \textit{``DayofWeek is Tues''}, thereby producing non-overlapping rules. Second, rule phrasing can hinder interpretation by reflecting observation-level or-conditions rather than the forecasting algorithm’s behavior. R2 indicates failures at 5:00 \emph{or} 16:00 on Sunday \emph{or} Monday, but for decision-making should be interpreted as the algorithm being prone to failure at both 5:00 and 16:00 on Sundays and Mondays. Third, predictor values may be misleading without knowledge of the data’s temporal resolution. For instance, “Minute is 10 or 20” \galit{means} %corresponds to
+failure over 10–29 minute intervals, not discrete minutes.
 %corresponds to failure over 10–29 minute intervals and not discrete time points. }
 
-\matt{The module resolves these issues, yielding consistent, non-overlapping, and interpretable rules. We also explored LLM-based rephrasing, but found outputs inconsistent; we therefore adopt a deterministic procedure. Section~\ref{sec-demo} illustrates the resulting rules.}
+The module resolves these issues, yielding consistent, non-overlapping, and interpretable rules. Section~\ref{sec-demo} illustrates the resulting rules.
 
 % We developed a custom interpretation module to transform the extracted rules from standard rule-extraction functions (e.g. \texttt{rpart.rules} in R) into useful predictive alerts. %Section~\ref{sec:rule-extraction} and to address limitations of standard regression-tree rule extraction tools . The module adapts rules to the data’s encoding and translates observation-level logic into algorithm-level behavior. 
 
@@ -612,7 +614,7 @@ TreeAlert applies the learned decision rules to an unseen test set. Specifically
 
 Evaluating TreeAlert's predictive performance is essential, as error behavior may differ between training and test sets, causing training-derived rules to produce false alerts on unseen data. This may also result from suboptimal tuning of TreeAlert’s parameters or when the training data does not span sufficient periods to identify error patterns. Employing a split-sample training-test approach in Step 2 enables prediction robustness assessments and guides parameter tuning and rule filtering. 
 
-As mentioned earlier, traditional forecasting evaluation metrics such as RMSE, MAE, and MAPE, are global performance measures that assess predictive performance across the entire dataset, implicitly assigning equal importance to all time periods. Contrarily, TreeAlert is specifically designed to detect and predict patterns of extreme forecasting failures, which  arise within a subset of temporally and contextually defined periods. Hence, we use lift as our core evaluation metric. Lift is computed separately on the training and test periods, and used to evaluate TreeAlert's ability to capture the subset of most extreme pattern-based failures. We focus on lift in a selected top percentile (e.g., the top ventile) $g_1$. Lift($g_1$) measures the degree to which the alerted subset concentrates extreme errors relative to the entire period. Lift values above 1 indicate better performance of the alerting segment compared to the baseline of no rules (overall MAE). The higher the lift value, the better TreeAlert captures failure patterns compared to treating all periods as equally risky. %a randomly chosen subset of the same size. %In other words, that alerts based on TreeAlert's rules capture higher 
+As mentioned earlier, traditional forecasting evaluation metrics such as RMSE, MAE, and MAPE, are global performance measures that assess predictive performance across the entire dataset, implicitly assigning equal importance to all time periods. Contrarily, TreeAlert is specifically designed to detect and predict patterns of extreme forecasting failures, which arise within a \matt{\emph{subset}} of temporally and contextually defined periods. Hence, we use lift as our core evaluation metric. Lift is computed separately on the training and test periods, and used to evaluate TreeAlert's ability to capture the subset of most extreme pattern-based failures. We focus on lift in a selected top percentile (e.g., the top ventile) $g_1$. Lift($g_1$) measures the degree to which the alerted subset concentrates extreme errors relative to the entire period. Lift values above 1 indicate better performance of the alerting segment compared to the baseline of no rules (overall MAE). The higher the lift value, the better TreeAlert captures failure patterns compared to treating all periods as equally risky. %a randomly chosen subset of the same size. %In other words, that alerts based on TreeAlert's rules capture higher
 %Consistent with section~\ref{sec:tuning_optimization} and \emph{Principle 6: Local Performance}, evaluation of TreeAlert's ability to capture extreme errors therefore relies on lift rather than global classification metrics.
 
 %\section{Lift for Hyperparameter Optimization}
@@ -627,18 +629,18 @@ As mentioned earlier, traditional forecasting evaluation metrics such as RMSE, M
 % }
 % \end{equation}
 
-%\subsection{Comparative Benchmark Evaluation}
-While we would have liked to compare TreeAlert's performance against alternative models, we have not been able to identify alternatives aimed at predicting the \emph{timing} of extreme model failures. We bemoan the lack of a fair comparison benchmark, %, as existing models do not predict the timing of extreme model failures. In 
-and therefore offer TreeAlert's outputs as a foundational benchmark for this emerging area. % We hope this benchmark can further the development of alternative solutions that compete on detection performance or interpretability. 
-We note that for such methods to serve as valid comparators, they should adhere to the eight principles. % in Section \ref{subsec-principles}. %our framework to be equally valid.
+\matt{\subsubsection{Baseline Comparisons}}
+\matt{While we would have liked to compare TreeAlert's performance against alternative models, we have not been able to identify alternatives aimed at predicting the timing of extreme model failures.  As shown in Table~\ref{tab:contrast}, other error analysis methods identify realized extreme errors retrospectively or monitors for changes as they emerge. Conventional forecasting models, such as neural networks, predict future values rather at a particular point rather than the timing and contextual conditions of a model's own failures. Table~\ref{tab:principles} specifies the properties that a direct comparator would need to satisfy.}
+
+\matt{A baseline that flags the largest historical errors is also not a valid predictive comparator because it uses realized error magnitudes to identify anomalous observations in the historical ground truth. This information is unavailable when prospective alerts are generated for the test period. Such a procedure assesses retrospective error identification rather than whether a rule learned from training data predicts future failure conditions.}
+
+\matt{The lift definition in Section~\ref{sec:tuning_optimization} provides the relevant naive benchmark. For a randomly selected subset of the same size as $g_1$, the expected subset error equals the full-period $MAE$, $\mathrm{E}[MAE_{g_1}]=MAE$. Equation~(2) therefore gives $\mathrm{E}[\mathrm{Lift}(g_1)]=MAE/MAE=1$. Thus, $\mathrm{Lift}(g_1)>1$ shows that TreeAlert's rules concentrate larger future errors than random flagging, whereas $\mathrm{Lift}(g_1)\leq1$ indicates no improvement over this benchmark. Methods intended as direct comparators must predict prospective failure timing and context while preserving the eight principles in Table~\ref{tab:principles}. We therefore offer TreeAlert's outputs as a foundational benchmark for this emerging area.}
 
 \section{Demonstrations of TreeAlert}
 \label{sec-demo}
 %\FloatBarrier
 
-TreeAlert offers actionable insights into critical applications where extreme forecasting 
-failures can have serious implications. In this section, we present two applications drawn 
-from distinct domains: electricity demand forecasting and personal health monitoring. 
+TreeAlert offers actionable insights into critical applications where extreme forecasting failures can have serious implications. In this section, we present two applications drawn from distinct domains: electricity demand forecasting and personal health monitoring. 
 Each application demonstrates TreeAlert's ability  to evaluate a model's forecasts by uncovering patterns characterized by recurring contextual conditions associated with extreme failures. Then, TreeAlert applies the learned patterns to predict future risky periods.%\footnote{Original data sources are cited in the references. R code and data reproducing the analyses is available from the first author's Github}%at https://github.com/mattbobea/TreeAlert.}.
 
 \subsection{Example 1: Forecasting Electricity Demand}
@@ -715,7 +717,7 @@ average error magnitudes.
 
 \begin{figure}[t]
 \centering
-\caption{\centering Electricity demand, forecasts, and forecast errors, with TreeAlert's flagged periods}
+\caption{Electricity demand, forecasts, and forecast errors, with TreeAlert's flagged periods}
 \includegraphics[width=.85\textwidth]{Figures/Electricity.png}
 \label{fig:electricity}
 \end{figure}
@@ -729,8 +731,8 @@ Each resulting rule is translated using the interpretation module (see Table \re
 
 \paragraph{Step 7 - Evaluating Predictive Performance:}
 
-\matt{%TreeAlert targets recurring failure patterns rather than isolated events. 
-Table~\ref{tab:elec_performance} summarizes predictive performance across  training and test sets. Figures~\ref{fig:elec_lift_test} present ventile lift charts using 20 equal-sized groups. The test lift of 1.38 confirms that flagged periods concentrate errors approximately 38\% above the global average. The close alignment between training and test lift indicates that the identified patterns generalize out-of-sample.}
+%TreeAlert targets recurring failure patterns rather than isolated events.
+Table~\ref{tab:elec_performance} summarizes predictive performance across  training and test sets. Figures~\ref{fig:elec_lift_test} present ventile lift charts using 20 equal-sized groups. The test lift of 1.38 confirms that flagged periods concentrate errors approximately 38\% above the global average. The close alignment between training and test lift indicates that the identified patterns generalize out-of-sample.
 
 % Recall that TreeAlert aims at capturing patterns of extreme errors, not single events. TreeAlert flagged 33 of 2,119 training periods and 16 of 696 test periods as potential extreme errors. Figures~\ref{fig:elec_lift_test} present ventile %quantile 
 % lift charts using 20 %25  
@@ -787,10 +789,10 @@ We split the heart rate series into the first 3,240 10-min buckets (training) an
 The regression tree is trained on the forecast errors as a function of the three temporal predictors and two contextual predictors. Using lift for hyperparameter tuning, we obtain  $n = 9$ and $cp = 0$.
 
 \paragraph{Step 4 - Rule Extraction and Filtering:}
-\matt{We extract the top three rules (Table \ref{tab:HeartRate_Table}). All corresponding terminal nodes have positive mean errors, indicating systematic under-forecasting. We set $k=3$ to balance rule strength and the number of flagged periods.}% We extract the top three rules as shown in Table \ref{tab:HeartRate_Table}. As in the electricity demand case, all associated terminal nodes have a positive mean error, indicating the forecasting model tends to under-forecast heart rate under those conditions. We selected only the top three rules to balance rule performance with the number of flagged periods. %conditions.
+We extract the top three rules (Table \ref{tab:HeartRate_Table}). All corresponding terminal nodes have positive mean errors, indicating systematic under-forecasting. We set $k=3$ to balance rule strength and the number of flagged periods. % We extract the top three rules as shown in Table \ref{tab:HeartRate_Table}. As in the electricity demand case, all associated terminal nodes have a positive mean error, indicating the forecasting model tends to under-forecast heart rate under those conditions. We selected only the top three rules to balance rule performance with the number of flagged periods. %conditions.
 
 \paragraph{Step 5 - Rule Visualization:}
-\matt{Figure \ref{fig:hr_viz} plots, heart rate values, forecasts and the forecast errors. Each panel highlights periods flagged by the top four rules. Points where rules overlap signal less unreliable periods, where failure conditions converge.}
+Figure \ref{fig:hr_viz} plots, heart rate values, forecasts and the forecast errors. Each panel highlights periods flagged by the top four rules. Points where rules overlap signal less unreliable periods, where failure conditions converge.
 
 \paragraph{Step 6 - Interpretation:}
 Table \ref{tab:HeartRate_Table} presents the translated rules revealing model failures during early weekday mornings and late afternoons. These  periods coincide with timings of increased physical activity as all three rules include Steps as a predictor. The Intensity predictor is excluded, likely due to its redundancy with the more granular Steps variable.
@@ -814,26 +816,26 @@ Table \ref{tab:HeartRate_Table} presents the translated rules revealing model fa
 
 \multirow{2}{*}{\Large\textcolor{violet}{$\bullet$}}
 & Regression Tree Rule
-& 43.73 when Steps\_10 is 466 to 663 \& Hour is 3 or 5 or 10 or 15 or 16\newline or 23 \& Minute is 10 or 20 or 40 or 50 \\
+& 43.8114 when steps $\geq$ 421 \& Hour is 16 \& Minute is 10 or 20 or 40 or 50 \\
 \cdashline{2-3}
 & Interpretation
-& \textit{The model under forecasts by an average of 44 when Steps\_10 is 466 to 663, Hour is 3AM, 5AM, 10AM, 3PM--4PM, and 11PM, and Minute is 10 through 29 and 40 through 59.} \\
+& \textit{The model under forecasts by an average of 44 when steps $\geq$ 421, Hour is 4PM, and Minute is 10 through 29 and 40 through 59.} \\
 \hline
 
 \multirow{2}{*}{\Large\textcolor[rgb]{0.0,0.6,0.0}{$\bullet$}}
 & Regression Tree Rule
-& 39.79 when Steps $\geq$ 1018 \& Hour is 4, 6--9, 11--13, 16--22 \\
+& 34.7374 when steps $\geq$ 1018 \& Hour is 4, 6--9, 11--14, 17--22 \\
 \cdashline{2-3}
 & Interpretation
-& \textit{The model under forecasts by an average of 35 when Steps $\geq$ 1018 and Hour is 4AM, 6AM--9AM, 11AM--2PM, and 5PM--10PM.} \\
+& \textit{The model under forecasts by an average of 35 when steps $\geq$ 1018 and Hour is 4AM, 6AM--9AM, 11AM--2PM, and 5PM--10PM.} \\
 \hline
 
 \multirow{2}{*}{\Large\textcolor{blue}{$\bullet$}}
 & Regression Tree Rule
-& 30.91 when Steps is 523 to 1018 \& Hour is 7 or 8 or 11 or 13 or 14 or 17 \& Minute is 20 or 40 or 50 \\
+& 33.3019 when steps $\geq$ 421 \& Hour is 5 or 15 \& Minute is 10 or 20 or 40 or 50 \\
 \cdashline{2-3}
 & Interpretation
-& \textit{The model under forecasts by an average of 30 when Steps is 523 to 1018, Hour is 7AM--8AM, 11AM, 1PM--2PM, 5PM, and Minute is 20 through 29 and 40 through 59.} \\
+& \textit{The model under forecasts by an average of 33 when steps $\geq$ 421, Hour is 5AM and 3PM, and Minute is 10 through 29 and 40 through 59.} \\
 \hline
 
 \end{tabular}
@@ -848,8 +850,8 @@ Table \ref{tab:HeartRate_Table} presents the translated rules revealing model fa
 
 
 \paragraph{Step 7 - Evaluating Predictive Performance:}
-\matt{Table~\ref{tab:hr_performance} summarizes predictive performance across training and test sets, with lift computed over 20 equal-sized ventile  groups (Figure~\ref{fig:hr_lift_train}). The test lift of 2.79 indicates 
-that flagged periods concentrate errors nearly three times the global average. The slightly higher test lift relative to training confirms that the identified failure patterns generalize out-of-sample.}
+Table~\ref{tab:hr_performance} summarizes predictive performance across training and test sets, with lift computed over 20 equal-sized ventile  groups (Figure~\ref{fig:hr_lift_train}). The test lift of 2.79 indicates
+that flagged periods concentrate errors nearly three times the global average. The slightly higher test lift relative to training confirms that the identified failure patterns generalize out-of-sample.
 
 % Table~\ref{tab:hr_performance} summarizes predictive performance across
 % training and test sets. The ventile %quantile 
@@ -911,7 +913,7 @@ choice of regression trees as the basis of TreeAlert is %also
 critical to adhere to our eight principles. % we have outlined. 
 We selected regression trees for their balance of interpretability, efficiency, and predictive capability. Such trees automatically identify informative predictor combinations and group similar error magnitudes (\emph{P6: Local Performance}). Critically, their interpretable rule-based outputs clearly outline conditions %under which 
 of forecasting errors, % occur, 
-enabling TreeAlert to predict extreme failure patterns (\emph{P1: Pattern-focus}; \emph{P5: Prospective}) with actionable, decision-maker-ready insights (\emph{P2: Actionability)}. Blackbox models, by contrast, obscure feature interactions %(Lai et al., 2009) 
+enabling TreeAlert to predict extreme failure patterns (\emph{P1: Pattern-focus}; \emph{P5: Prospective}) with actionable, decision-maker-ready insights (\emph{P2: Actionability}). Blackbox models, by contrast, obscure feature interactions %(Lai et al., 2009) 
 and are ill-suited to settings requiring integrating external judgment with risk assessment or explainability \citep{rudin2019, houssainy2021}, undermining \emph{P4: Transparency}. Post-hoc approximations such as SHAP and LIME do not faithfully represent true internal behavior \citep{rudin2019} and fail to yield grouped, predictor-combination rules. Furthermore, from only numerical error magnitudes, their timestamps, and potential contextual information, regression trees are able to capture a diverse range of error patterns (P3) with minimal user input to make TreeAlert truly model-agnostic (P7).\footnote{We also investigated classifying errors into “extreme/non-extreme” and using classification trees \galit{but met} %. But this %approach revealed several 
 challenges. First, labeling each error as “extreme” or “non-extreme” requires a domain-based or statistical rule that is often arbitrary or hard to obtain. Second, dichotomization causes information loss by discarding error magnitudes; the resulting tree cannot group errors with similar magnitudes near label boundaries. Third, terminal nodes are no longer ordered, leading to redundant, partially overlapping rules.}
 % \footnote{We also investigated %the option of 
@@ -984,7 +986,7 @@ Operationally efficient at every modeling stage: parsimonious inputs, low traini
 
 To illustrate TreeAlert using a probabilistic forecast, we apply the Winkler score to central 80\% prediction intervals generated from the ARIMA model used in the heart-rate example\footnote{For the electricity demand example, only point forecasts were made available by the governmental operational platform, and the models themselves are not disclosed. We therefore cannot illustrate probabilistic forecasting for this dataset.} (see Section~4.2). Specifically, we set $\alpha=0.2$. Next we replace the absolute point-forecast error with the Winkler score $S_t$ as the outcome variable in the regression tree. This allows TreeAlert to identify patterns of systematically poor interval forecast performance rather than large point-forecast errors alone.
 
-\subsection*{Tree Estimation and Rule Extraction}
+\subsection{Tree Estimation and Rule Extraction}
 
 The regression tree is estimated on Winkler scores from the training data using the same predictors from Section~4.2 (Minute, Hour, Weekday, Steps, and Intensity). When tuning TreeAlert under the Winkler score objective using grid search, we obtained the same hyperparameter configuration as in the original point-forecast heart-rate example. The three terminal nodes with the highest mean Winkler scores are retained and translated into interpretable rules (Table~\ref{tab:winkler_rules}). Each rule corresponds to recurring conditions of poor probabilistic forecast performance arising from overly wide prediction intervals, insufficient coverage, or both.
 
@@ -1004,7 +1006,7 @@ The regression tree is estimated on Winkler scores from the training data using 
 \end{tabular}
 \end{table}
 
-\subsection*{Visualization and Lift Evaluation}
+\subsection{Visualization and Lift Evaluation}
 
 Lift-based evaluation using 20 equal-sized ventiles (Figure~\ref{fig:winkler_lift_test}) yields first-ventile lift of 3.45 in the training period and 3.20 in the test period. These values indicate that the top 5\% of alerted periods contain more than three times the average Winkler score of the full evaluation period. The close alignment between training and test lift scores suggests that patterns of probabilistic forecast under-performance are generalizable.
 
@@ -1081,6 +1083,8 @@ $-534.00$  & The model over-forecasts by an average of 534 when Day of Week is S
 
 We conduct five sensitivity analyses to examine whether TreeAlert's lift performance depends on particular modeling choices. First, we vary the regression-tree hyperparameters one at a time around the specification selected by grid search: the complexity parameter, minimum bucket size, and maximum tree depth. Second, we vary the temporal training share from 70\% to 90\%, preserving chronological ordering. Third, we vary the temporal feature set used to estimate the tree. Fourth, we vary the number of top-ranked rules retained for alerting. Fifth, we vary Lift's top quantile size, from the top 1\% to the top 10\% of ranked observations. In the first three analyses, TreeAlert is re-estimated and first-ventile lift is recomputed on the training and test samples. In the rule-count analysis, the optimized tree is held fixed and lift is recomputed for observations covered by the top-$k$ terminal-node rules. In the quantile-size analysis, hyperparameters are selected by maximizing \(\mathrm{Lift}(g_1)\) under each candidate top-quantile size.
 
+\subsection{Hyperparameter Sensitivity}
+
 Figures~\ref{fig:appendix_elec_hyperparameter_sensitivity} and~\ref{fig:appendix_hr_hyperparameter_sensitivity} report one-at-a-time hyperparameter sensitivity. For each panel, two hyperparameters are held at the grid-search values used in the main specification, while the remaining hyperparameter is varied over its candidate grid. Each plotted point is the first-ventile lift from the tree estimated under that configuration; the connecting line shows the local sensitivity profile. In Figures~13--16, the dashed horizontal line denotes the first-ventile lift obtained under the main specification.
 
 \begin{figure}[H]
@@ -1113,6 +1117,8 @@ Figures~\ref{fig:appendix_elec_hyperparameter_sensitivity} and~\ref{fig:appendix
   \label{fig:appendix_hr_hyperparameter_sensitivity}
 \end{figure}
 
+\subsection{Train-Test Split Sensitivity}
+
 Figures~\ref{fig:appendix_elec_split_sensitivity} and~\ref{fig:appendix_hr_split_sensitivity} evaluate sensitivity to the temporal train-test split. Although first-ventile lift varies with the amount of data assigned to estimation, electricity lift remains above 1.5 in training and 1.0 in testing, whereas heart-rate lift remains above 2.0 in both samples across the evaluated temporal partitions. Thus, TreeAlert continues to rank observations with elevated forecast errors above the unconditional benchmark under each split considered.
 
 \begin{figure}[H]
@@ -1144,6 +1150,8 @@ Figures~\ref{fig:appendix_elec_split_sensitivity} and~\ref{fig:appendix_hr_split
   \caption{Heart-rate train-test split sensitivity: training lift (left) and test lift (right).}
   \label{fig:appendix_hr_split_sensitivity}
 \end{figure}
+
+\subsection{Temporal Feature Sensitivity}
 
 Table~\ref{tab:appendix_feature_sensitivity} reports sensitivity to temporal feature granularity. The feature sets are intentionally restricted to combinations that preserve meaningful temporal ordering. For example, specifications that include minute-of-hour also include hour-of-day, avoiding combinations such as minute and weekday without hour. The results provide a check on whether the reported lift depends on one particular temporal encoding.
 
@@ -1178,6 +1186,8 @@ Table~\ref{tab:appendix_feature_sensitivity} reports sensitivity to temporal fea
 \end{samepage}
 }
 
+\subsection{Rule-Count Sensitivity}
+
 Figure~\ref{fig:appendix_k_rule_sensitivity} evaluates sensitivity to the number of rules retained after the optimized tree has been estimated. The analysis varies $k$ from 1 to 10 and reports the lift obtained by the observations covered by the corresponding top-$k$ rule set. This assesses whether the alerting performance depends on a single arbitrary choice of rule-count threshold.
 
 \begin{figure}[H]
@@ -1197,6 +1207,8 @@ Figure~\ref{fig:appendix_k_rule_sensitivity} evaluates sensitivity to the number
 
 \clearpage
 
+\subsection{Top-Quantile Size Sensitivity}
+
 Figure~\ref{fig:appendix_threshold_sensitivity} reports sensitivity to Lift's top quantile size. The x-axis varies this quantile from the top 1\% to the top 10\% of observations ranked by TreeAlert. For each candidate top-quantile size, TreeAlert hyperparameters are selected by maximizing training \(\mathrm{Lift}(g_1)\), and the fitted tree is then evaluated on the test period. Across electricity and heart-rate forecasts, test lift remains above 1 for all quantile sizes considered. The ranking therefore remains informative as the top quantile expands, rather than being driven only by the first-ventile setting.
 
 \begin{figure}[H]
@@ -1212,6 +1224,103 @@ Figure~\ref{fig:appendix_threshold_sensitivity} reports sensitivity to Lift's to
   \end{minipage}
   \caption{Lift sensitivity to top quantile size: electricity (left), heart rate (right).}
   \label{fig:appendix_threshold_sensitivity}
+\end{figure}
+
+\FloatBarrier
+\matt{\section{Confidence Assessment}}
+\label{appendix:confidence_assessment}
+
+\matt{To assess robustness to the temporal composition of the sample, we use ordered leave-one-block-out validation, a blocked cross-validation design suited to time-series machine learning. For each application, the chronological training set is divided into 20 contiguous, approximately equal-sized blocks. One block is removed from the training set, and the remaining 19 blocks form the training set for that validation run. A grid search is performed over the candidate hyperparameter combinations on this training set, and the configuration that maximizes training first-ventile lift is selected. The tree is refitted using the selected configuration, and lift is calculated both on the retained training observations and on the unchanged external test set. Repeating this procedure for every removed block produces 20 paired training and test lift estimates, each obtained from a separately re-optimized model.}
+
+\matt{Figure~\ref{fig:appendix_ordered_lift_validation} plots the fold-level estimates in chronological fold order. The shaded regions denote empirical 95\% intervals, defined by the 2.5th and 97.5th percentiles of the 20 fold estimates; the dashed horizontal line marks lift equal to one, corresponding to no concentration of forecast error beyond the unconditional benchmark. These intervals are resampling-based evidence of predictive stability rather than formal hypothesis tests or $p$-values. In both applications, the lower interval bounds remain above one for the retained training and fixed test evaluations (Table~\ref{tab:appendix_ordered_lift_validation}), indicating that positive lift is maintained across the ordered training perturbations.}
+
+{\spacingset{1}
+\noindent\begin{minipage}{\textwidth}
+\centering
+\captionof{table}{Ordered leave-one-block-out validation of first-ventile lift}
+\label{tab:appendix_ordered_lift_validation}
+{\small
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\textwidth}{@{}l>{\centering\arraybackslash}X>{\centering\arraybackslash}X@{}}
+\toprule
+\textbf{Application} & \textbf{Training lift (95\% interval)} & \textbf{Test lift (95\% interval)} \\
+\midrule
+Electricity demand & 1.60--1.76 & 1.21--1.40 \\
+Heart rate         & 2.28--2.38 & 1.85--2.66 \\
+\bottomrule
+\end{tabularx}}
+\end{minipage}
+}
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Figures/electricity_ordered_lift_validation.png}
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Figures/heart_rate_ordered_lift_validation.png}
+  \end{minipage}
+  \caption{Leave-one-block-out lift validation: electricity demand (left) and heart rate (right).}
+  \label{fig:appendix_ordered_lift_validation}
+\end{figure}
+
+\matt{\section{Simulation Study: Complex Lunar-Calendar Seasonality}}
+\label{appendix:scenario_b_simulation}
+
+\matt{We supplement the two empirical applications with a controlled simulation of Scenario B, in which recurring forecast failures arise from calendars that are not aligned. We generate ten years of daily demand from 2015 through 2024 with weak Gregorian annual and weekly variation and a Lunar New Year effect. The event produces a pre-holiday increase, a holiday-period decrease, and a post-holiday rebound. Because the Lunar New Year moves across Gregorian dates while remaining known in advance, this design creates recurring, prospectively observable error patterns that are not represented by fixed Gregorian seasonality. The first seven years are used for training and the remaining three years are held out for testing.}
+
+\matt{For each simulated series, a univariate weekly seasonal ARIMA model is fitted using demand history only; it receives no Lunar New Year dates, holiday indicators, or other external regressors. TreeAlert is then estimated from the ARIMA residuals using Gregorian month, Gregorian day of week, and days relative to Lunar New Year as prospective predictors. The complete hyperparameter grid is searched on the training period by maximizing first-ventile lift, after which the selected tree is evaluated on the fixed test period. Figure~\ref{fig:appendix_scenario_b_example} shows a representative test-period realization. The ARIMA forecast does not adapt to the moving calendar effect, whereas TreeAlert flags observations around the resulting high-error periods.}
+
+\matt{To assess stability across stochastic realizations, the data-generating process is repeated 100 times with independent innovation and event-effect draws. Each replication repeats the ARIMA estimation, TreeAlert grid search, and out-of-sample evaluation. Median first-ventile lift is 2.76 in training and 2.21 in testing, with interquartile ranges of 2.71--2.81 and 2.07--2.41, respectively (Table~\ref{tab:appendix_scenario_b_lift}). All 100 test replications yield lift above one. The simulation therefore shows that TreeAlert can concentrate future forecast failures when a univariate forecasting model omits a shifting but known calendar effect. This controlled evidence addresses Scenario B only; performance for the remaining scenarios requires further empirical evaluation.}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.94\linewidth]{Figures/scenario_b_forecast_flags.png}
+  \caption{Representative Scenario B test period. The blue line is simulated demand, the orange line is the univariate ARIMA forecast, and red circles mark TreeAlert-flagged observations. The dashed vertical line denotes Lunar New Year.}
+  \label{fig:appendix_scenario_b_example}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Figures/scenario_b_lift_train.png}
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.49\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Figures/scenario_b_lift_test.png}
+  \end{minipage}
+  \caption{Representative Scenario B first-ventile lift: training period (left) and fixed test period (right). The dashed horizontal line denotes lift equal to one.}
+  \label{fig:appendix_scenario_b_lift}
+\end{figure}
+
+{\spacingset{1}
+\noindent\begin{minipage}{\textwidth}
+\centering
+\captionof{table}{Scenario B first-ventile lift across 100 simulations}
+\label{tab:appendix_scenario_b_lift}
+{\small
+\renewcommand{\arraystretch}{1.2}
+\begin{tabularx}{\textwidth}{@{}l>{\centering\arraybackslash}X>{\centering\arraybackslash}X>{\centering\arraybackslash}X@{}}
+\toprule
+\textbf{Evaluation set} & \textbf{Median lift} & \textbf{Interquartile range} & \textbf{Replications with lift $> 1$} \\
+\midrule
+Training & 2.76 & 2.71--2.81 & 100/100 \\
+Test & 2.21 & 2.07--2.41 & 100/100 \\
+\bottomrule
+\end{tabularx}}
+\end{minipage}
+}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.72\linewidth]{Figures/scenario_b_monte_carlo_lift.png}
+  \caption{Distribution of Scenario B first-ventile lift across 100 independent simulations. The dashed horizontal line denotes lift equal to one.}
+  \label{fig:appendix_scenario_b_monte_carlo}
 \end{figure}
 
 \end{document}

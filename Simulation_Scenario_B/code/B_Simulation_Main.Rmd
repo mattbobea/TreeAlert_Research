@@ -21,63 +21,57 @@ source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", 
 
 Configuration
 ```{r}
-# Point-forecast residual analysis.
-# Probabilistic-score analyses are in Heart_Rate_Probabilistic_Main.Rmd.
-analysis_choice_label <- "point_forecast"
-analysis_target_label <- "Forecast Error"
+# Scenario B ARIMA forecast-residual analysis.
+analysis_choice_label <- "scenario_b"
+analysis_target_label <- "ARIMA Forecast Error"
 lift_metric <- "rmse"
-heart_output_prefix <- "hr_rmse"
+simulation_output_prefix <- "scenario_b"
 
 n_groups <- 20
 n_rules <- 3
-minute_increment <- 10
-run_sensitivity_analysis <- 1L  # Set to 0L to skip all sensitivity analyses.
+minute_increment <- NULL
 
-# Initialized so the results summary still runs when sensitivity analysis is off.
-sensitivity_results <- NULL
-split_sensitivity_results <- NULL
-feature_sensitivity_results <- NULL
-k_rule_sensitivity_results <- NULL
-threshold_lift_sensitivity_results <- NULL
-
-baseline_formula <- .resid ~ Minute + Hour + Weekday + Intensity + Steps_10
-fixed_formula <- .resid ~ Hour + Minute + Weekday + Intensity + Steps_10
+baseline_formula <- .resid ~ Day + WeekofMonth + WeekofYear + Month
+fixed_formula <- .resid ~ Day + WeekofMonth + WeekofYear + Month
 final_formula <- fixed_formula
 
 param_grid <- expand.grid(
-  cp        = c(0, 0.0001, 0.001, 0.005, 0.01),
+  cp        = c(0, 0.0001, 0.001),
   minbucket = seq(4, 8, by = 1),
-  maxdepth  = seq(1, 6, by = 1)
+  maxdepth  = seq(1, 8, by = 1)
 )
 ```
 
 Load Data
 ```{r, include=FALSE, warning=FALSE, message=FALSE}
-heart_dir <- if (dir.exists("Heart_Rate")) "Heart_Rate" else "."
-heart_image_dir <- file.path(heart_dir, "images")
-heart_sensitivity_image_dir <- file.path(heart_image_dir, "sensitivity")
-heart_image_file <- function(filename) {
-  paste0(heart_output_prefix, "_", filename)
-}
-dir.create(heart_image_dir, showWarnings = FALSE, recursive = TRUE)
-dir.create(heart_sensitivity_image_dir, showWarnings = FALSE, recursive = TRUE)
-heart_data_1 <- readRDS(file.path(heart_dir, "HR_data", "heart_combined.rds"))
+simulation_dir <- if (dir.exists("Simulation_Scenario_B")) "Simulation_Scenario_B" else ".."
+simulation_image_dir <- file.path(simulation_dir, "images")
+simulation_results_dir <- file.path(simulation_dir, "results")
+dir.create(simulation_image_dir, showWarnings = FALSE, recursive = TRUE)
+dir.create(simulation_results_dir, showWarnings = FALSE, recursive = TRUE)
+source(file.path(simulation_dir, "code", "generate_actual_and_forecasts_data.R"))
+analysis_data <- series_data
 ```
 
 Prepare Data
 ```{r}
-message("Analysis target: original point-forecast residuals with RMSE lift")
-analysis_data <- heart_data_1
-
-# ============================================================
-# Train / Test split (85 / 15)
-split_index <- floor(0.85 * nrow(analysis_data))
-
-train_set <- analysis_data[1:split_index, ]
-test_set  <- analysis_data[(split_index + 1):nrow(analysis_data), ]
+# Data preparation is performed in generate_actual_and_forecasts_data.R.
+# It creates the temporal predictors and assigns the prepared series to analysis_data above.
 ```
+
 Train/Test Split
 ```{r, warning=FALSE}
+# Chronological split: seven years for training and three years for testing.
+training_end <- as.Date("2021-12-31")
+test_start <- as.Date("2022-01-01")
+
+train_set <- analysis_data %>%
+  filter(Time <= training_end, is.finite(.resid))
+test_set <- analysis_data %>%
+  filter(Time >= test_start, is.finite(.resid))
+
+stopifnot(nrow(train_set) == 2557L, nrow(test_set) == 1096L)
+
 #------------Calculate Theta - Top / bottom 5% of data ------------
 top_5_percent <- quantile(train_set$.resid, probs = 0.95, na.rm = TRUE)
 bottom_5_percent <- quantile(train_set$.resid, probs = 0.05, na.rm = TRUE)
@@ -96,6 +90,7 @@ Baseline Tree
 # leaf_nodes <- predict(tree_model, newdata = analysis_data, type = "vector")
 # analysis_data_with_leaf <- dplyr::bind_cols(analysis_data, Leaf_Node = leaf_nodes)
 ```
+
 Lift Charts
 ```{r}
 # Disabled baseline lift charts. Retained for reference only.
@@ -118,14 +113,15 @@ Grid Search
 ## ============================================================================
 ## GRID SEARCH: Optimize Tree Parameters ONLY
 ## Fixed Predictors:
-## Hour + Minute + Weekday + Intensity + Steps_10
+## Day + WeekofMonth + WeekofYear + Month
 ## Using SAME Lift Metric
 ## ============================================================================
 
 # RUN GRID SEARCH
+grid_search_formula <- .resid ~ Day + WeekofMonth + WeekofYear + Month
 grid_search <- tree_alert_grid_search(
   train_set = train_set,
-  formula = fixed_formula,
+  formula = grid_search_formula,
   param_grid = param_grid,
   n_groups = n_groups,
   pred_col_name = "Pred_Temp",
@@ -144,6 +140,7 @@ print(best_params)
 
 Final Model
 ```{r}
+final_formula <- .resid ~ Day + WeekofMonth + WeekofYear + Month
 cat("  FINAL MODEL FORMULA USED\n")
 print(final_formula)
 
@@ -171,6 +168,7 @@ cat(" ATTACHED LEAF NODE PREDICTIONS\n")
 cat("=============================\n")
 print(head(analysis_data_with_leaf))
 ```
+
 Final Lift Charts
 ```{r}
 # ---- Compute lift for BEST MODEL ----
@@ -181,7 +179,8 @@ best_train <- tree_alert_compute_lift(
   lift_metric = lift_metric,
   axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
 )
-ggsave(file.path(heart_image_dir, heart_image_file("lift_train.png")), plot = last_plot(), width = 8, height = 6, dpi = 1000)
+ggsave(file.path(simulation_image_dir, "scenario_b_lift_train.png"),
+       plot = last_plot(), width = 8, height = 6, dpi = 1000)
 best_test <- tree_alert_compute_lift(
   test_set, best_tree_model, "Pred_Best", "Best Model (Test)",
   plot = TRUE, n_groups = n_groups,
@@ -189,7 +188,8 @@ best_test <- tree_alert_compute_lift(
   lift_metric = lift_metric,
   axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
 )
-ggsave(file.path(heart_image_dir, heart_image_file("lift_test.png")), plot = last_plot(), width = 8, height = 6, dpi = 1000)
+ggsave(file.path(simulation_image_dir, "scenario_b_lift_test.png"),
+       plot = last_plot(), width = 8, height = 6, dpi = 1000)
 ```
 
 Top Rules
@@ -204,7 +204,19 @@ selected_rules <- rule_selection$selected_rules
 selected_rule_values <- rule_selection$selected_rule_values
 rule_text_output <- tree_alert_list_top_rules(
   selected_rules = selected_rules,
-  minute_increment = minute_increment
+  minute_increment = NULL
+)
+
+scenario_b_rule_output <- tibble(
+  rule = seq_along(rule_text_output$raw_rules),
+  raw_rule = rule_text_output$raw_rules,
+  interpretation = rule_text_output$interpreted_rules
+)
+
+print(scenario_b_rule_output)
+write_csv(
+  scenario_b_rule_output,
+  file.path(simulation_results_dir, "scenario_b_top_rules.csv")
 )
 ```
 
@@ -302,16 +314,13 @@ print(rule_coverage)
 
 All Rules Plots
 ```{r, warning=FALSE, message=FALSE}
-#fills gaps with NA's so that the line does not appear on blanks. 
+# Fills gaps with NA values so the daily series remains continuous.
 analysis_data_filled <- analysis_data %>%
-  complete(Time = seq(min(Time), max(Time), by = "10 min"))
-# -----------
-# Filter points based on your criteria
-highlight_points <- subset(analysis_data_filled,
-             (Hour %in% c("5", "6") & Weekday %in% 
-                c("1", "2", "3", "4", "5")) |  # Weekday early AM
-             Weekday %in% c("7") |  # Weekends
-             WeekofMonth %in% c("1", "4", "5")) # 1st/4th/5th weeks of the month
+  complete(Time = seq.Date(min(Time), max(Time), by = "day"))
+
+# Temporary daily-calendar highlight used until the Scenario B rule plots are revised.
+highlight_points <- analysis_data_filled %>%
+  filter(Month %in% c(1, 2), WeekofMonth %in% 1:3)
 
 # Plot of filtered rules on full series
 post_rules_line_plot <- ggplot(analysis_data_filled, aes(x = Time, y = .resid)) +
@@ -322,7 +331,7 @@ post_rules_line_plot <- ggplot(analysis_data_filled, aes(x = Time, y = .resid)) 
        style='color:#F8666D'><b>Non-extreme</b></span> values",
        x = NULL, y = NULL, color = "Variable") +
   scale_color_manual(values = c("FALSE" = "#F8766D", "TRUE" = "#C77CFF")) +
-  scale_x_datetime(date_breaks = "4 day", date_labels = "%m-%d", 
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y", 
                    expand = c(0.02, 0.02)) +
   theme_bw() +
   theme(legend.position = "none") + 
@@ -365,9 +374,7 @@ residual_plot
 
 two_plots <- grid.arrange(actual_predicted_plot, residual_plot, ncol = 1)
 # Export the plot
-#ggsave("HeartRate.png", 
-#       plot = two_plots, width = 6, height = 4, dpi = 800) 
-ggsave(file.path(heart_image_dir, heart_image_file("viz.png")), 
+ggsave(file.path(simulation_image_dir, "scenario_b_rule_visualization.png"),
        plot = two_plots, width = 6, height = 4.5, dpi = 800)
 ```
 Metrics
@@ -381,120 +388,21 @@ performance_summary <- tree_alert_performance_summary(
 )
 ```
 
-Sensitivity Analysis
-```{r, warning=FALSE, message=FALSE, eval=run_sensitivity_analysis == 1L}
-sensitivity_analysis <- tree_alert_sensitivity_analysis(
-  train_set = train_set,
-  test_set = test_set,
-  formula = final_formula,
-  param_grid = param_grid,
-  fixed_params = best_params,
-  n_groups = n_groups,
-  lift_metric = lift_metric,
-  reference_train_lift = best_train$lift,
-  reference_test_lift = best_test$lift,
-  train_image_path = file.path(heart_sensitivity_image_dir, heart_image_file("sensitivity_train_lift.png")),
-  test_image_path = file.path(heart_sensitivity_image_dir, heart_image_file("sensitivity_test_lift.png"))
-)
-
-sensitivity_results <- sensitivity_analysis$results
-sensitivity_train_plot <- sensitivity_analysis$train_plot
-sensitivity_test_plot <- sensitivity_analysis$test_plot
-sensitivity_train_plot
-sensitivity_test_plot
-```
-
-Train/Test Split Sensitivity Analysis
-```{r, warning=FALSE, message=FALSE, eval=run_sensitivity_analysis == 1L}
-split_sensitivity_analysis <- tree_alert_split_sensitivity_analysis(
-  data = analysis_data,
-  formula = final_formula,
-  param_grid = param_grid,
-  n_groups = n_groups,
-  lift_metric = lift_metric,
-  train_share_min = 70,
-  train_share_max = 90,
-  train_share_step = 1,
-  reference_train_lift = best_train$lift,
-  reference_test_lift = best_test$lift,
-  train_image_path = file.path(heart_sensitivity_image_dir, heart_image_file("split_sensitivity_train_lift.png")),
-  test_image_path = file.path(heart_sensitivity_image_dir, heart_image_file("split_sensitivity_test_lift.png"))
-)
-
-split_sensitivity_results <- split_sensitivity_analysis$results
-split_sensitivity_train_plot <- split_sensitivity_analysis$train_plot
-split_sensitivity_test_plot <- split_sensitivity_analysis$test_plot
-split_sensitivity_train_plot
-split_sensitivity_test_plot
-```
-
-Feature Specification Sensitivity Results
-```{r, warning=FALSE, message=FALSE, eval=run_sensitivity_analysis == 1L}
-feature_sensitivity_analysis <- tree_alert_feature_sensitivity_analysis(
-  train_set = train_set,
-  test_set = test_set,
-  feature_formulas = list(
-    "Hour" = .resid ~ Hour,
-    "Minute + Hour" = .resid ~ Minute + Hour,
-    "Hour + Weekday" = .resid ~ Hour + Weekday,
-    "Minute + Hour + Weekday" = .resid ~ Minute + Hour + Weekday
-  ),
-  param_grid = param_grid,
-  n_groups = n_groups,
-  lift_metric = lift_metric,
-  reference_train_lift = best_train$lift,
-  reference_test_lift = best_test$lift
-)
-
-feature_sensitivity_results <- feature_sensitivity_analysis$results
-feature_sensitivity_results
-```
-
-K-Rule Sensitivity Analysis
-```{r, warning=FALSE, message=FALSE, eval=run_sensitivity_analysis == 1L}
-k_rule_sensitivity_analysis <- tree_alert_k_rule_sensitivity_analysis(
-  train_set = train_set,
-  test_set = test_set,
-  tree_rules = tree_rules,
-  model = best_tree_model,
-  k_values = 1:10,
-  n_groups = n_groups,
-  lift_metric = lift_metric,
-  image_path = file.path(heart_sensitivity_image_dir, heart_image_file("k_rule_sensitivity_lift.png"))
-)
-
-k_rule_sensitivity_results <- k_rule_sensitivity_analysis$results
-k_rule_sensitivity_plot <- k_rule_sensitivity_analysis$plot
-k_rule_sensitivity_results
-k_rule_sensitivity_plot
-```
-
-Quantile Threshold Sensitivity Analysis
-```{r, warning=FALSE, message=FALSE, eval=run_sensitivity_analysis == 1L}
-threshold_lift_sensitivity_results <- tree_alert_threshold_lift_sensitivity_analysis(
-  train_set = train_set,
-  test_set = test_set,
-  formula = final_formula,
-  param_grid = param_grid,
-  thresholds = seq(0.01, 0.10, by = 0.01),
-  lift_metric = lift_metric
-)
-
-threshold_lift_sensitivity_plot <- tree_alert_threshold_lift_sensitivity_plot(
-  threshold_lift_sensitivity_results,
-  image_path = file.path(heart_sensitivity_image_dir, heart_image_file("threshold_sensitivity_lift.png"))
-)
-
-threshold_lift_sensitivity_results
-threshold_lift_sensitivity_plot
-```
-
 Update Results Summary
 ```{r, warning=FALSE, message=FALSE}
+image_outputs <- data.frame(
+  output = c("train_lift", "test_lift", "visualization"),
+  path = c(
+    file.path(simulation_image_dir, "scenario_b_lift_train.png"),
+    file.path(simulation_image_dir, "scenario_b_lift_test.png"),
+    file.path(simulation_image_dir, "scenario_b_rule_visualization.png")
+  )
+)
+
 tree_alert_update_results_summary(
-  output_path = file.path(if (dir.exists("TA_functions")) "." else "..", "Results", "TreeAlert_results_summary.md"),
-  section_id = "heart_rate_rmse",
-  title = "Heart Rate: Point-Forecast Residuals",
+  output_path = file.path(simulation_results_dir, "TreeAlert_results_summary.md"),
+  section_id = "scenario_b",
+  title = "Simulation Scenario B: ARIMA Forecast Residuals",
   analysis_choice = analysis_choice_label,
   analysis_target = analysis_target_label,
   formula = final_formula,
@@ -509,29 +417,6 @@ tree_alert_update_results_summary(
   performance_summary = performance_summary,
   rule_text_output = rule_text_output,
   rule_coverage = rule_coverage,
-  sensitivity_results = sensitivity_results,
-  split_sensitivity_results = split_sensitivity_results,
-  feature_sensitivity_results = feature_sensitivity_results,
-  k_rule_sensitivity_results = k_rule_sensitivity_results,
-  threshold_sensitivity_results = threshold_lift_sensitivity_results,
-  image_outputs = data.frame(
-    output = c(
-      "train_lift", "test_lift", "visualization",
-      "hyperparameter_train", "hyperparameter_test",
-      "split_train", "split_test",
-      "k_rule", "threshold"
-    ),
-    path = c(
-      file.path(heart_image_dir, heart_image_file("lift_train.png")),
-      file.path(heart_image_dir, heart_image_file("lift_test.png")),
-      file.path(heart_image_dir, heart_image_file("viz.png")),
-      file.path(heart_sensitivity_image_dir, heart_image_file("sensitivity_train_lift.png")),
-      file.path(heart_sensitivity_image_dir, heart_image_file("sensitivity_test_lift.png")),
-      file.path(heart_sensitivity_image_dir, heart_image_file("split_sensitivity_train_lift.png")),
-      file.path(heart_sensitivity_image_dir, heart_image_file("split_sensitivity_test_lift.png")),
-      file.path(heart_sensitivity_image_dir, heart_image_file("k_rule_sensitivity_lift.png")),
-      file.path(heart_sensitivity_image_dir, heart_image_file("threshold_sensitivity_lift.png"))
-    )
-  )
+  image_outputs = image_outputs
 )
 ```

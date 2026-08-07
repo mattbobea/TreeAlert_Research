@@ -388,6 +388,297 @@ tree_alert_train_best_model <- function(train_set, formula, best_params) {
   )
 }
 
+tree_alert_ordered_leave_block_validation <- function(data,
+                                                       test_set,
+                                                       formula,
+                                                       param_grid,
+                                                       n_folds = 20,
+                                                       n_groups = 20,
+                                                       actual_col = ".resid",
+                                                       pred_col_name = "Pred_Ordered_Validation",
+                                                       lift_metric = c("mean_abs", "rmse"),
+                                                       cp_digits = NULL) {
+  lift_metric <- match.arg(lift_metric)
+
+  if (!is.data.frame(data) || !is.data.frame(test_set)) {
+    stop("data and test_set must both be data frames.")
+  }
+  if (!is.numeric(n_folds) || length(n_folds) != 1 ||
+      is.na(n_folds) || n_folds < 2 || n_folds != floor(n_folds)) {
+    stop("n_folds must be a single integer greater than or equal to 2.")
+  }
+  if (nrow(data) < n_folds) {
+    stop("data must contain at least n_folds observations.")
+  }
+  if (!actual_col %in% names(data) || !actual_col %in% names(test_set)) {
+    stop("actual_col must be present in both data and test_set.")
+  }
+
+  ordered_data <- as.data.frame(data)
+  if ("Time" %in% names(ordered_data)) {
+    ordered_data <- ordered_data[order(ordered_data$Time), , drop = FALSE]
+  }
+
+  fold_id <- floor((seq_len(nrow(ordered_data)) - 1) * n_folds / nrow(ordered_data)) + 1
+
+  fold_results <- dplyr::bind_rows(lapply(seq_len(n_folds), function(fold_number) {
+    fold_train <- ordered_data[fold_id != fold_number, , drop = FALSE]
+    held_out <- ordered_data[fold_id == fold_number, , drop = FALSE]
+
+    grid_search <- tree_alert_grid_search(
+      train_set = fold_train,
+      formula = formula,
+      param_grid = param_grid,
+      n_groups = n_groups,
+      actual_col = actual_col,
+      pred_col_name = pred_col_name,
+      cp_digits = cp_digits,
+      lift_metric = lift_metric
+    )
+
+    if (nrow(grid_search$best_params) != 1) {
+      stop("No valid optimal parameter set was found for fold ", fold_number, ".")
+    }
+
+    fold_model <- tree_alert_train_best_model(
+      train_set = fold_train,
+      formula = formula,
+      best_params = grid_search$best_params
+    )
+
+    fold_train[[pred_col_name]] <- as.numeric(
+      predict(fold_model, newdata = fold_train, type = "vector")
+    )
+    fixed_test <- as.data.frame(test_set)
+    fixed_test[[pred_col_name]] <- as.numeric(
+      predict(fold_model, newdata = fixed_test, type = "vector")
+    )
+
+    time_value <- function(values, position) {
+      if (!"Time" %in% names(ordered_data) || !nrow(values)) {
+        return(NA_character_)
+      }
+      as.character(values$Time[position])
+    }
+
+    data.frame(
+      fold = fold_number,
+      held_out_start = time_value(held_out, 1),
+      held_out_end = time_value(held_out, nrow(held_out)),
+      held_out_periods = nrow(held_out),
+      train_periods = nrow(fold_train),
+      test_periods = nrow(fixed_test),
+      cp = grid_search$best_params$cp[[1]],
+      minbucket = grid_search$best_params$minbucket[[1]],
+      maxdepth = grid_search$best_params$maxdepth[[1]],
+      train_lift = tree_alert_compute_lift_numeric(
+        df = fold_train,
+        actual_col = actual_col,
+        pred_col = pred_col_name,
+        n_groups = n_groups,
+        lift_metric = lift_metric
+      ),
+      test_lift = tree_alert_compute_lift_numeric(
+        df = fixed_test,
+        actual_col = actual_col,
+        pred_col = pred_col_name,
+        n_groups = n_groups,
+        lift_metric = lift_metric
+      ),
+      stringsAsFactors = FALSE
+    )
+  }))
+
+  interval_summary <- dplyr::bind_rows(lapply(
+    c("train_lift", "test_lift"),
+    function(lift_column) {
+      lift_values <- fold_results[[lift_column]]
+      lift_values <- lift_values[is.finite(lift_values)]
+      if (!length(lift_values)) {
+        stop("No finite lift values were produced for ", lift_column, ".")
+      }
+
+      lower <- unname(stats::quantile(lift_values, probs = 0.025, names = FALSE))
+      upper <- unname(stats::quantile(lift_values, probs = 0.975, names = FALSE))
+
+      data.frame(
+        series = if (lift_column == "train_lift") "Retained training" else "Fixed test",
+        n_folds = length(lift_values),
+        mean_lift = mean(lift_values),
+        median_lift = stats::median(lift_values),
+        empirical_95_lower = lower,
+        empirical_95_upper = upper,
+        interval_above_one = lower > 1,
+        interval_includes_one = lower <= 1 && upper >= 1,
+        stringsAsFactors = FALSE
+      )
+    }
+  ))
+
+  list(
+    fold_results = fold_results,
+    interval_summary = interval_summary,
+    n_folds = n_folds,
+    n_groups = n_groups,
+    lift_metric = lift_metric
+  )
+}
+
+tree_alert_ordered_validation_plot <- function(validation_results,
+                                                image_path = NULL,
+                                                width = 8.5,
+                                                height = 5.5,
+                                                dpi = 1000,
+                                                legend_position = c(0.02, 0.04),
+                                                legend_justification = c("left", "bottom")) {
+  if (is.null(validation_results$fold_results) ||
+      is.null(validation_results$interval_summary)) {
+    stop("validation_results must be returned by tree_alert_ordered_leave_block_validation().")
+  }
+
+  fold_results <- validation_results$fold_results
+  interval_summary <- validation_results$interval_summary
+  n_folds <- validation_results$n_folds
+
+  plot_data <- dplyr::bind_rows(
+    data.frame(
+      fold = fold_results$fold,
+      series = "Retained training",
+      lift = fold_results$train_lift,
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      fold = fold_results$fold,
+      series = "Fixed test",
+      lift = fold_results$test_lift,
+      stringsAsFactors = FALSE
+    )
+  )
+
+  ribbon_data <- interval_summary |>
+    dplyr::transmute(
+      series,
+      xmin = 1,
+      xmax = n_folds,
+      ymin = empirical_95_lower,
+      ymax = empirical_95_upper
+    )
+
+  # Keep the no-concentration benchmark visibly inside the plotting region.
+  reference_line <- data.frame(y = 1, series = "Lift = 1")
+
+  validation_plot <- ggplot2::ggplot(
+    plot_data,
+    ggplot2::aes(x = fold, y = lift, color = series, shape = series)
+  ) +
+    ggplot2::geom_rect(
+      data = ribbon_data,
+      ggplot2::aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = series),
+      inherit.aes = FALSE,
+      alpha = 0.16,
+      color = NA,
+      show.legend = FALSE
+    ) +
+    ggplot2::geom_hline(
+      data = reference_line,
+      ggplot2::aes(yintercept = y, color = series, linetype = series),
+      linewidth = 0.6
+    ) +
+    ggplot2::geom_line(linewidth = 0.65) +
+    ggplot2::geom_point(
+      size = 2.4,
+      fill = "white",
+      stroke = 0.8,
+      show.legend = FALSE
+    ) +
+    ggplot2::scale_color_manual(
+      values = c(
+        "Retained training" = "#4682B4",
+        "Fixed test" = "#FF8C00",
+        "Lift = 1" = "#B2182B"
+      ),
+      breaks = c("Retained training", "Fixed test", "Lift = 1"),
+      drop = FALSE
+    ) +
+    ggplot2::scale_fill_manual(
+      values = c("Retained training" = "#4682B4", "Fixed test" = "#FF8C00")
+    ) +
+    ggplot2::scale_shape_manual(
+      values = c(
+        "Retained training" = 21,
+        "Fixed test" = 24,
+        "Lift = 1" = NA
+      ),
+      breaks = c("Retained training", "Fixed test", "Lift = 1"),
+      drop = FALSE,
+      guide = "none"
+    ) +
+    ggplot2::scale_linetype_manual(
+      values = c(
+        "Retained training" = "solid",
+        "Fixed test" = "solid",
+        "Lift = 1" = "dashed"
+      ),
+      breaks = c("Retained training", "Fixed test", "Lift = 1"),
+      drop = FALSE
+    ) +
+    ggplot2::scale_x_continuous(
+      breaks = sort(unique(c(seq(1, n_folds, by = 2), n_folds))),
+      limits = c(1, n_folds)
+    ) +
+    ggplot2::scale_y_continuous(
+      breaks = seq(1, 2.8, by = 0.3),
+      limits = c(1, 2.8),
+      labels = scales::label_number(accuracy = 0.1)
+    ) +
+    ggplot2::labs(
+      x = "Ordered leave-one-block-out fold",
+      y = "Lift",
+      color = NULL,
+      shape = NULL,
+      linetype = NULL
+    ) +
+    ggplot2::guides(
+      color = ggplot2::guide_legend(
+        override.aes = list(
+          shape = c(24, 21, NA),
+          linetype = c("solid", "solid", "dashed"),
+          linewidth = c(0.8, 0.8, 0.8)
+        )
+      ),
+      linetype = "none"
+    ) +
+    ggplot2::theme_bw(base_size = 18) +
+    ggplot2::theme(
+      panel.grid.minor = ggplot2::element_blank(),
+      legend.position = "inside",
+      legend.position.inside = legend_position,
+      legend.justification = legend_justification,
+      legend.direction = "horizontal",
+      legend.background = ggplot2::element_rect(
+        fill = scales::alpha("white", 0.85),
+        color = "grey70",
+        linewidth = 0.3
+      ),
+      legend.key = ggplot2::element_blank(),
+      legend.text = ggplot2::element_text(size = 15),
+      legend.key.width = grid::unit(0.9, "cm"),
+      axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)
+    )
+
+  if (!is.null(image_path)) {
+    ggplot2::ggsave(
+      filename = image_path,
+      plot = validation_plot,
+      width = width,
+      height = height,
+      dpi = dpi
+    )
+  }
+
+  validation_plot
+}
+
 tree_alert_threshold_lift_sensitivity_analysis <- function(train_set,
                                                            test_set,
                                                            formula,

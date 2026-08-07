@@ -11,3 +11,8 @@ hr_viz.png
 winkler_lift_test.png
 winkler_lift_train.png
 TreeAlert_Blinded.pdf
+Simulation_Scenario_B/data/
+Simulation_Scenario_B/images/
+Simulation_Scenario_B/results/
+Simulation_Scenario_B/code/*.html
+Simulation_Scenario_B/code/old_code/*.html

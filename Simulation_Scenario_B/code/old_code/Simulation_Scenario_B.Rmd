@@ -1,0 +1,209 @@
+---
+title: "Simulation Scenario B"
+output: html_document
+---
+
+## Libraries
+
+```{r setup, include=FALSE, warning=FALSE, message=FALSE}
+library(dplyr)
+library(readr)
+library(lubridate)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(rpart)
+library(rpart.plot)
+library(scales)
+
+root_dir <- if (dir.exists("TA_functions")) "." else if (dir.exists("../TA_functions")) ".." else "../.."
+simulation_dir <- if (dir.exists("Simulation_Scenario_B")) "Simulation_Scenario_B" else ".."
+data_dir <- file.path(simulation_dir, "data")
+image_dir <- file.path(simulation_dir, "images")
+results_dir <- file.path(simulation_dir, "results")
+
+source(file.path(root_dir, "TA_functions", "TA_functions.R"))
+
+dir.create(image_dir, showWarnings = FALSE, recursive = TRUE)
+dir.create(results_dir, showWarnings = FALSE, recursive = TRUE)
+```
+
+## Configuration
+
+```{r configuration}
+analysis_target_label <- "ARIMA Forecast Error"
+lift_metric <- "rmse"
+n_rules <- 3
+training_end <- as.Date("2021-12-31")
+test_start <- as.Date("2022-01-01")
+
+# Week is week of month: 1--5.
+final_formula <- .resid ~ Day + Week + Month
+
+param_grid <- expand.grid(
+  cp = c(0, 0.0001, 0.001, 0.005, 0.01),
+  minbucket = seq(4, 8, by = 1),
+  maxdepth = seq(4, 8, by = 1),
+  stringsAsFactors = FALSE
+)
+```
+
+## Load Simulation Data
+
+```{r prepare-data}
+analysis_data <- read_csv(
+  file.path(data_dir, "scenario_b_actual_forecast_series.csv"),
+  show_col_types = FALSE
+) %>%
+  mutate(
+    Time = as.Date(Time),
+    Day = day(Time),
+    Week = ceiling(day(Time) / 7),
+    Month = month(Time)
+  ) %>%
+  select(Time, Value, .fitted, .resid, Day, Week, Month)
+
+train_set <- analysis_data %>% filter(Time <= training_end, is.finite(.resid))
+test_set <- analysis_data %>% filter(Time >= test_start, is.finite(.resid))
+```
+
+## Grid Search
+
+```{r grid-search}
+grid_search <- tree_alert_grid_search(
+  train_set = train_set,
+  formula = final_formula,
+  param_grid = param_grid,
+  n_groups = 20,
+  pred_col_name = "Tree_Prediction",
+  lift_metric = lift_metric
+)
+best_params <- grid_search$best_params
+
+cat("Best parameters\n")
+print(best_params)
+```
+
+## Final Model and Lift
+
+```{r final-model}
+best_tree_model <- tree_alert_train_best_model(
+  train_set = train_set,
+  formula = final_formula,
+  best_params = best_params
+)
+
+train_set$Tree_Prediction <- as.numeric(predict(best_tree_model, newdata = train_set, type = "vector"))
+test_set$Tree_Prediction <- as.numeric(predict(best_tree_model, newdata = test_set, type = "vector"))
+analysis_data <- bind_rows(train_set, test_set) %>% arrange(Time)
+
+train_lift <- tree_alert_compute_lift_numeric(train_set, ".resid", "Tree_Prediction", 20, lift_metric)
+test_lift <- tree_alert_compute_lift_numeric(test_set, ".resid", "Tree_Prediction", 20, lift_metric)
+
+tree_rules <- rpart.plot::rpart.rules(best_tree_model, cover = FALSE, digits = 4, nn = FALSE)
+rule_selection <- tree_alert_pull_top_k_rules(tree_rules, n_rules = n_rules)
+selected_rules <- rule_selection$selected_rules
+selected_rule_values <- rule_selection$selected_rule_values
+raw_rules <- vapply(
+  seq_len(nrow(selected_rules)),
+  function(i) tree_alert_format_rule_raw(selected_rules[i, ]),
+  character(1)
+)
+
+cat("\nFirst-ventile RMSE lift\n")
+cat("Training:", round(train_lift, 3), "\n")
+cat("Test:    ", round(test_lift, 3), "\n")
+```
+
+## Top Rules
+
+```{r top-rules}
+rule_output <- tibble(
+  rule = seq_along(raw_rules),
+  raw_rule = raw_rules
+)
+print(rule_output)
+```
+
+## Rule Coverage and Overlays
+
+```{r rule-plots, warning=FALSE, message=FALSE}
+rule_points <- bind_rows(lapply(seq_along(selected_rule_values), function(i) {
+  analysis_data %>%
+    filter(round(Tree_Prediction, 4) == round(as.numeric(selected_rule_values[i]), 4)) %>%
+    mutate(Rule = paste("Rule", i))
+})) %>%
+  mutate(Rule = factor(Rule, levels = paste("Rule", seq_along(selected_rule_values))))
+
+rule_coverage <- rule_points %>%
+  group_by(Rule) %>%
+  summarise(
+    train_points = sum(Time <= training_end),
+    test_points = sum(Time >= test_start),
+    total_points = n(),
+    .groups = "drop"
+  )
+print(rule_coverage)
+
+rule_colors <- c("Rule 1" = "#B2182B", "Rule 2" = "#2166AC", "Rule 3" = "#1B7837")
+base_theme <- theme_bw(base_size = 15) +
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.position = c(0.02, 0.98),
+    legend.justification = c("left", "top"),
+    legend.background = element_rect(fill = alpha("white", 0.9), color = "grey70")
+  )
+
+actual_fitted_plot <- ggplot(analysis_data, aes(x = Time)) +
+  geom_line(aes(y = Value, color = "Actual"), linewidth = 0.35) +
+  geom_line(aes(y = .fitted, color = "ARIMA fitted / forecast"), linewidth = 0.35) +
+  geom_point(data = rule_points, aes(y = Value, color = Rule),
+             shape = 21, fill = "white", size = 1.8, stroke = 0.8) +
+  geom_vline(xintercept = test_start, linetype = "dashed", color = "#333333") +
+  scale_color_manual(values = c("Actual" = "#4C78A8", "ARIMA fitted / forecast" = "#E17C05", rule_colors)) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  labs(x = NULL, y = "Daily demand", color = NULL) +
+  base_theme
+
+residual_plot <- ggplot(analysis_data, aes(x = Time, y = .resid)) +
+  geom_hline(yintercept = 0, color = "#333333", linewidth = 0.45) +
+  geom_line(color = "#4C78A8", linewidth = 0.35) +
+  geom_point(data = rule_points, aes(color = Rule),
+             shape = 21, fill = "white", size = 1.8, stroke = 0.8) +
+  geom_vline(xintercept = test_start, linetype = "dashed", color = "#333333") +
+  scale_color_manual(values = rule_colors) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  labs(x = NULL, y = analysis_target_label, color = NULL) +
+  base_theme
+
+grid.arrange(actual_fitted_plot, residual_plot, ncol = 1)
+
+ggsave(file.path(image_dir, "scenario_b_tuning_actual_fitted_rules.png"),
+       actual_fitted_plot, width = 11, height = 5.5, dpi = 1000)
+ggsave(file.path(image_dir, "scenario_b_tuning_error_rules.png"),
+       residual_plot, width = 11, height = 4.7, dpi = 1000)
+```
+
+## Save Tuning Results
+
+```{r save-results}
+summary_output <- tibble(
+  setting = c("Predictors", "Rules retained", "Lift metric", "Best cp", "Best minbucket", "Best maxdepth", "Training first-ventile lift", "Test first-ventile lift"),
+  value = c(
+    "Day, week of month, Month",
+    as.character(n_rules),
+    "RMSE",
+    format(best_params$cp, scientific = FALSE, trim = TRUE),
+    as.character(best_params$minbucket),
+    as.character(best_params$maxdepth),
+    sprintf("%.3f", train_lift),
+    sprintf("%.3f", test_lift)
+  )
+)
+
+write_csv(summary_output, file.path(results_dir, "scenario_b_tuning_summary.csv"))
+write_csv(rule_output, file.path(results_dir, "scenario_b_tuning_rules.csv"))
+write_csv(rule_coverage, file.path(results_dir, "scenario_b_tuning_rule_coverage.csv"))
+write_csv(grid_search$results, file.path(results_dir, "scenario_b_tuning_grid_search.csv"))
+saveRDS(best_tree_model, file.path(results_dir, "scenario_b_tuning_tree_model.rds"))
+```
