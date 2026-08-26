@@ -806,7 +806,7 @@ tree_alert_update_results_summary(
       "train_lift", "test_lift", "visualization",
       "hyperparameter_train", "hyperparameter_test",
       "split_train", "split_test",
-      "k_rule", "threshold"
+      "k_rule", "threshold", "kfold_cv"
     ),
     path = c(
       file.path(elec_image_dir, "Electricity_Lift_Train.png"),
@@ -817,8 +817,42 @@ tree_alert_update_results_summary(
       file.path(elec_sensitivity_image_dir, "elec_split_sensitivity_train_lift.png"),
       file.path(elec_sensitivity_image_dir, "elec_split_sensitivity_test_lift.png"),
       file.path(elec_sensitivity_image_dir, "elec_k_rule_sensitivity_lift.png"),
-      file.path(elec_sensitivity_image_dir, "elec_threshold_sensitivity_lift.png")
+      file.path(elec_sensitivity_image_dir, "elec_threshold_sensitivity_lift.png"),
+      file.path(elec_image_dir, "electricity_kfold_cv_lift.png")
     )
   )
 )
+```
+
+20-Fold Cross-Validation
+```{r, warning=FALSE, message=FALSE}
+elec_cv <- tree_alert_kfold_cross_validation(
+  train_set = train_set,
+  test_set = test_set,
+  formula = final_formula,
+  param_grid = param_grid,
+  n_folds = 20,
+  n_groups = n_groups,
+  lift_metric = "mean_abs",
+  fold_seed = 3001L
+)
+
+elec_cv_results <- elec_cv$results
+elec_results_dir <- file.path(elec_dir, "results")
+dir.create(elec_results_dir, showWarnings = FALSE, recursive = TRUE)
+write.csv(
+  elec_cv_results,
+  file.path(elec_results_dir, "electricity_kfold_cv_lift.csv"),
+  row.names = FALSE
+)
+elec_cv_results
+```
+
+First-Ventile Lift Cross-Validation Boxplot
+```{r, warning=FALSE, message=FALSE}
+elec_cv_boxplot <- tree_alert_make_lift_boxplot(
+  cv_results = elec_cv_results,
+  image_path = file.path(elec_image_dir, "electricity_kfold_cv_lift.png")
+)
+elec_cv_boxplot$plot
 ```

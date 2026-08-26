@@ -1,0 +1,374 @@
+---
+title: "Scenario B Replication Sensitivity Analysis"
+output: html_document
+---
+
+## Libraries
+
+```{r setup, include=FALSE, warning=FALSE, message=FALSE}
+library(dplyr)
+library(readr)
+library(tidyr)
+library(ggplot2)
+library(rpart.plot)
+
+root_dir <- if (dir.exists("TA_functions")) "." else if (dir.exists("../TA_functions")) ".." else "../.."
+simulation_dir <- if (dir.exists("Simulation_Scenario_B")) "Simulation_Scenario_B" else ".."
+results_dir <- file.path(simulation_dir, "results")
+image_dir <- file.path(simulation_dir, "images", "sensitivity")
+dir.create(results_dir, showWarnings = FALSE, recursive = TRUE)
+dir.create(image_dir, showWarnings = FALSE, recursive = TRUE)
+
+source(file.path(root_dir, "TA_functions", "TA_functions.R"))
+source(file.path(root_dir, "TA_functions", "Rephrase_Rule_Func.R"))
+source(file.path(simulation_dir, "code", "generate_actual_and_forecasts_data.R"))
+```
+
+## Configuration
+
+```{r configuration}
+# auto.arima() is deterministic. The replication seed changes the simulated
+# innovations and Lunar New Year shock magnitudes before ARIMA is fitted.
+seed_override <- Sys.getenv("SCENARIO_B_REPLICATION_SEEDS", unset = "")
+replication_seeds <- if (nzchar(seed_override)) {
+  as.integer(strsplit(seed_override, ",", fixed = TRUE)[[1]])
+} else {
+  1001:1100
+}
+n_groups <- 20
+n_rules <- 4
+lift_metric <- "rmse"
+analysis_id <- "no_iso_week_depth_7"
+tree_formula <- .resid ~ Day + WeekofMonth + Month
+
+param_grid <- expand.grid(
+  cp = c(0, 0.00001, 0.0001, 0.0005),
+  minbucket = seq(4, 8, by = 1),
+  maxdepth = seq(1, 7, by = 1)
+)
+```
+
+## Replication Function
+
+```{r replication-function}
+run_replication <- function(seed) {
+  analysis_data <- generate_actual_and_forecasts_data(
+    seed = seed,
+    write_output = FALSE
+  )
+  train_set <- analysis_data %>% filter(Time <= as.Date("2021-12-31"))
+  test_set <- analysis_data %>% filter(Time >= as.Date("2022-01-01"))
+
+  grid_search <- tree_alert_grid_search(
+    train_set = train_set,
+    formula = tree_formula,
+    param_grid = param_grid,
+    n_groups = n_groups,
+    pred_col_name = "Tree_Prediction",
+    lift_metric = lift_metric
+  )
+  best_params <- grid_search$best_params
+  tree_model <- tree_alert_train_best_model(
+    train_set = train_set,
+    formula = tree_formula,
+    best_params = best_params
+  )
+
+  train_set$Tree_Prediction <- as.numeric(predict(tree_model, newdata = train_set, type = "vector"))
+  test_set$Tree_Prediction <- as.numeric(predict(tree_model, newdata = test_set, type = "vector"))
+  train_lift <- tree_alert_compute_lift_numeric(
+    train_set, ".resid", "Tree_Prediction", n_groups, lift_metric
+  )
+  test_lift <- tree_alert_compute_lift_numeric(
+    test_set, ".resid", "Tree_Prediction", n_groups, lift_metric
+  )
+
+  tree_rules <- rpart.plot::rpart.rules(tree_model, cover = FALSE, digits = 4, nn = FALSE)
+  rule_selection <- tree_alert_pull_top_k_rules(tree_rules, n_rules = n_rules)
+  raw_rules <- vapply(
+    seq_len(nrow(rule_selection$selected_rules)),
+    function(i) tree_alert_format_rule_raw(rule_selection$selected_rules[i, ]),
+    character(1)
+  )
+
+  replication_results <- tibble(
+    seed = seed,
+    cp = best_params$cp,
+    minbucket = best_params$minbucket,
+    maxdepth = best_params$maxdepth,
+    terminal_nodes = length(unique(train_set$Tree_Prediction)),
+    train_first_ventile_lift = train_lift,
+    test_first_ventile_lift = test_lift
+  )
+  grid_results <- grid_search$results %>% mutate(seed = seed, .before = 1)
+  rules_results <- tibble(
+    seed = seed,
+    rule_rank = seq_along(raw_rules),
+    raw_rule = raw_rules,
+    interpretation = vapply(raw_rules, rephrase_rule, character(1), minute_increment = NULL)
+  )
+
+  list(
+    replication_results = replication_results,
+    grid_results = grid_results,
+    rules_results = rules_results
+  )
+}
+```
+
+## Run Replications
+
+```{r run-replications, warning=FALSE, message=FALSE}
+merge_replication_csv <- function(new_data, path, key_columns) {
+  existing_data <- if (file.exists(path)) {
+    read_csv(path, show_col_types = FALSE)
+  } else {
+    new_data[0, ]
+  }
+
+  bind_rows(new_data, existing_data) %>%
+    distinct(across(all_of(key_columns)), .keep_all = TRUE) %>%
+    arrange(across(all_of(key_columns)))
+}
+
+replication_output <- lapply(replication_seeds, run_replication)
+
+replication_results <- merge_replication_csv(
+  bind_rows(lapply(replication_output, `[[`, "replication_results")),
+  file.path(results_dir, paste0("scenario_b_", analysis_id, "_replication_results.csv")),
+  "seed"
+)
+grid_results <- merge_replication_csv(
+  bind_rows(lapply(replication_output, `[[`, "grid_results")),
+  file.path(results_dir, paste0("scenario_b_", analysis_id, "_replication_grid_search.csv")),
+  c("seed", "cp", "minbucket", "maxdepth")
+)
+rules_results <- merge_replication_csv(
+  bind_rows(lapply(replication_output, `[[`, "rules_results")),
+  file.path(results_dir, paste0("scenario_b_", analysis_id, "_replication_rules.csv")),
+  c("seed", "rule_rank")
+)
+
+write_csv(
+  replication_results,
+  file.path(results_dir, paste0("scenario_b_", analysis_id, "_replication_results.csv"))
+)
+write_csv(
+  grid_results,
+  file.path(results_dir, paste0("scenario_b_", analysis_id, "_replication_grid_search.csv"))
+)
+write_csv(
+  rules_results,
+  file.path(results_dir, paste0("scenario_b_", analysis_id, "_replication_rules.csv"))
+)
+```
+
+## Lift Summary
+
+```{r lift-summary}
+lift_summary <- replication_results %>%
+  summarise(
+    replications = n(),
+    train_min = min(train_first_ventile_lift),
+    train_q25 = quantile(train_first_ventile_lift, 0.25),
+    train_median = median(train_first_ventile_lift),
+    train_q75 = quantile(train_first_ventile_lift, 0.75),
+    train_max = max(train_first_ventile_lift),
+    test_min = min(test_first_ventile_lift),
+    test_q25 = quantile(test_first_ventile_lift, 0.25),
+    test_median = median(test_first_ventile_lift),
+    test_q75 = quantile(test_first_ventile_lift, 0.75),
+    test_max = max(test_first_ventile_lift),
+    test_lift_above_one_pct = mean(test_first_ventile_lift > 1) * 100
+  )
+
+write_csv(
+  lift_summary,
+  file.path(results_dir, paste0("scenario_b_", analysis_id, "_replication_lift_summary.csv"))
+)
+
+lift_summary
+```
+
+## Lift Distribution
+
+```{r lift-boxplot}
+lift_long <- replication_results %>%
+  select(seed, train_first_ventile_lift, test_first_ventile_lift) %>%
+  pivot_longer(
+    cols = -seed,
+    names_to = "evaluation_set",
+    values_to = "lift"
+  ) %>%
+  mutate(
+    evaluation_set = recode(
+      evaluation_set,
+      train_first_ventile_lift = "Training",
+      test_first_ventile_lift = "Test"
+    ),
+    evaluation_set = factor(evaluation_set, levels = c("Training", "Test"))
+  )
+
+one_sided_boxplot_stats <- function(data, group_vars) {
+  data %>%
+    group_by(across(all_of(group_vars))) %>%
+    summarise(
+      ymin = quantile(lift, 0.05),
+      lower = quantile(lift, 0.25),
+      middle = median(lift),
+      upper = quantile(lift, 0.75),
+      ymax = quantile(lift, 0.75),
+      .groups = "drop"
+    )
+}
+
+one_sided_lower_tail <- function(data, group_vars) {
+  data %>%
+    group_by(across(all_of(group_vars))) %>%
+    filter(lift < quantile(lift, 0.05)) %>%
+    ungroup()
+}
+
+replication_lift_stats <- one_sided_boxplot_stats(lift_long, "evaluation_set")
+replication_lift_lower_tail <- one_sided_lower_tail(lift_long, "evaluation_set")
+
+replication_lift_plot <- ggplot() +
+  geom_hline(yintercept = 1, linetype = "solid", color = "black", linewidth = 0.7) +
+  geom_boxplot(
+    data = replication_lift_stats,
+    aes(
+      x = evaluation_set, ymin = ymin, lower = lower, middle = middle,
+      upper = upper, ymax = ymax, fill = evaluation_set, group = evaluation_set
+    ),
+    stat = "identity", width = 0.55, color = "#333333"
+  ) +
+  geom_point(
+    data = replication_lift_lower_tail,
+    aes(x = evaluation_set, y = lift),
+    position = position_jitter(width = 0.07, height = 0),
+    size = 1.8, shape = 21, fill = "white", color = "#333333"
+  ) +
+  scale_fill_manual(values = c("Training" = "#4C78A8", "Test" = "#E17C05")) +
+  scale_y_continuous(breaks = scales::breaks_pretty(n = 6)) +
+  coord_flip() +
+  labs(x = NULL, y = "First-ventile lift") +
+  theme_bw(base_size = 18) +
+  theme(
+    legend.position = "none",
+    panel.grid.minor = element_blank(),
+    axis.title.y = element_text(size = 18, face = "plain"),
+    axis.text.x = element_text(size = 18, face = "plain")
+  )
+
+replication_lift_plot
+
+ggsave(
+  file.path(image_dir, paste0("scenario_b_", analysis_id, "_replication_lift_sensitivity.png")),
+  plot = replication_lift_plot,
+  width = 9,
+  height = 3.3,
+  dpi = 1000
+)
+```
+
+## Selected Hyperparameter Sensitivity
+
+```{r selected-hyperparameter-sensitivity}
+format_parameter_setting <- function(setting, hyperparameter) {
+  if (hyperparameter == "Complexity parameter") {
+    formatC(setting, format = "f", digits = 5, drop0trailing = TRUE)
+  } else {
+    as.character(as.integer(setting))
+  }
+}
+
+selected_parameter_lift <- replication_results %>%
+  select(seed, cp, minbucket, maxdepth, train_first_ventile_lift, test_first_ventile_lift) %>%
+  pivot_longer(
+    cols = c(train_first_ventile_lift, test_first_ventile_lift),
+    names_to = "evaluation_set",
+    values_to = "lift"
+  ) %>%
+  mutate(
+    evaluation_set = recode(
+      evaluation_set,
+      train_first_ventile_lift = "Training",
+      test_first_ventile_lift = "Test"
+    ),
+    evaluation_set = factor(evaluation_set, levels = c("Training", "Test"))
+  ) %>%
+  pivot_longer(
+    cols = c(cp, minbucket, maxdepth),
+    names_to = "hyperparameter",
+    values_to = "setting"
+  ) %>%
+  mutate(
+    hyperparameter = recode(
+      hyperparameter,
+      cp = "Complexity parameter",
+      minbucket = "Minimum bucket",
+      maxdepth = "Maximum depth"
+    ),
+    setting_label = mapply(format_parameter_setting, setting, hyperparameter),
+    setting_label = factor(setting_label, levels = unique(setting_label[order(setting)])),
+    hyperparameter = factor(
+      hyperparameter,
+      levels = c("Complexity parameter", "Minimum bucket", "Maximum depth")
+    )
+  )
+
+selected_parameter_stats <- one_sided_boxplot_stats(
+  selected_parameter_lift,
+  c("hyperparameter", "setting_label", "evaluation_set")
+)
+selected_parameter_lower_tail <- one_sided_lower_tail(
+  selected_parameter_lift,
+  c("hyperparameter", "setting_label", "evaluation_set")
+)
+
+selected_parameter_plot <- ggplot(
+  selected_parameter_stats,
+  aes(
+    x = setting_label, fill = evaluation_set,
+    group = interaction(setting_label, evaluation_set)
+  )
+) +
+  geom_hline(yintercept = 1, linetype = "solid", color = "black", linewidth = 0.6) +
+  geom_boxplot(
+    aes(ymin = ymin, lower = lower, middle = middle, upper = upper, ymax = ymax),
+    stat = "identity",
+    position = position_dodge(width = 0.75),
+    width = 0.65,
+    color = "#333333"
+  ) +
+  geom_point(
+    data = selected_parameter_lower_tail,
+    aes(
+      x = setting_label, y = lift, fill = evaluation_set,
+      group = interaction(setting_label, evaluation_set)
+    ),
+    position = position_jitterdodge(jitter.width = 0.08, dodge.width = 0.75),
+    size = 1.4, shape = 21, color = "#333333"
+  ) +
+  facet_wrap(~hyperparameter, scales = "free_x", nrow = 1) +
+  scale_fill_manual(values = c("Training" = "#4C78A8", "Test" = "#E17C05")) +
+  scale_y_continuous(breaks = scales::breaks_pretty(n = 6)) +
+  labs(x = "Hyperparameter value", y = "First-ventile lift", fill = NULL) +
+  theme_bw(base_size = 18) +
+  theme(
+    legend.position = "top",
+    panel.grid.minor = element_blank(),
+    strip.background = element_rect(fill = "grey90"),
+    strip.text = element_text(face = "bold")
+  )
+
+selected_parameter_plot
+
+ggsave(
+  file.path(image_dir, paste0("scenario_b_", analysis_id, "_selected_parameter_lift.png")),
+  plot = selected_parameter_plot,
+  width = 11,
+  height = 4.25,
+  dpi = 1000
+)
+```

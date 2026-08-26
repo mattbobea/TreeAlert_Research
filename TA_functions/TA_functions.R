@@ -84,7 +84,14 @@ tree_alert_lift_data <- function(df,
   actual_ord <- actual[ord]
   n <- length(actual_ord)
 
-  group <- ceiling(seq_len(n) / (n / n_groups))
+  # When an evaluation fold contains fewer observations than the requested
+  # number of groups, retain one ranked observation per available group so
+  # that the highest-ranked group remains defined.
+  group <- if (n < n_groups) {
+    seq_len(n)
+  } else {
+    ceiling(seq_len(n) / (n / n_groups))
+  }
   group[group > n_groups] <- n_groups
 
   lift_summary <- if (lift_metric == "rmse") {
@@ -595,7 +602,7 @@ tree_alert_ordered_validation_plot <- function(validation_results,
       values = c(
         "Retained training" = "#4682B4",
         "Fixed test" = "#FF8C00",
-        "Lift = 1" = "#B2182B"
+        "Lift = 1" = "black"
       ),
       breaks = c("Retained training", "Fixed test", "Lift = 1"),
       drop = FALSE
@@ -617,7 +624,7 @@ tree_alert_ordered_validation_plot <- function(validation_results,
       values = c(
         "Retained training" = "solid",
         "Fixed test" = "solid",
-        "Lift = 1" = "dashed"
+        "Lift = 1" = "solid"
       ),
       breaks = c("Retained training", "Fixed test", "Lift = 1"),
       drop = FALSE
@@ -642,7 +649,7 @@ tree_alert_ordered_validation_plot <- function(validation_results,
       color = ggplot2::guide_legend(
         override.aes = list(
           shape = c(24, 21, NA),
-          linetype = c("solid", "solid", "dashed"),
+          linetype = c("solid", "solid", "solid"),
           linewidth = c(0.8, 0.8, 0.8)
         )
       ),
@@ -2129,5 +2136,199 @@ tree_alert_update_results_summary <- function(output_path,
     file_path = output_path,
     section_id = section_id,
     section_lines = section_lines
+  )
+}
+
+tree_alert_kfold_cross_validation <- function(train_set,
+                                              test_set,
+                                              formula,
+                                              param_grid,
+                                              n_folds = 20,
+                                              n_groups = 20,
+                                              actual_col = ".resid",
+                                              pred_col_name = "Pred_CV",
+                                              lift_metric = c("mean_abs", "rmse"),
+                                              fold_seed = 3001L) {
+  lift_metric <- match.arg(lift_metric)
+
+  if (!is.data.frame(train_set) || !is.data.frame(test_set)) {
+    stop("train_set and test_set must both be data frames.")
+  }
+  if (!is.numeric(n_folds) || length(n_folds) != 1 ||
+      is.na(n_folds) || n_folds < 2 || n_folds != floor(n_folds)) {
+    stop("n_folds must be a single integer greater than or equal to 2.")
+  }
+  if (!actual_col %in% names(train_set) || !actual_col %in% names(test_set)) {
+    stop("actual_col must be present in both train_set and test_set.")
+  }
+  if (nrow(train_set) < n_folds) {
+    stop("train_set must contain at least n_folds observations.")
+  }
+
+  training_data <- as.data.frame(train_set)
+  external_test <- as.data.frame(test_set)
+
+  set.seed(as.integer(fold_seed))
+  fold_id <- sample(rep(seq_len(as.integer(n_folds)), length.out = nrow(training_data)))
+
+  fold_results <- lapply(seq_len(as.integer(n_folds)), function(fold) {
+    fit_data <- training_data[fold_id != fold, , drop = FALSE]
+    held_out <- training_data[fold_id == fold, , drop = FALSE]
+
+    grid_search <- tree_alert_grid_search(
+      train_set = fit_data,
+      formula = formula,
+      param_grid = param_grid,
+      n_groups = n_groups,
+      pred_col_name = pred_col_name,
+      actual_col = actual_col,
+      lift_metric = lift_metric
+    )
+
+    model <- tree_alert_train_best_model(
+      train_set = fit_data,
+      formula = formula,
+      best_params = grid_search$best_params
+    )
+
+    fit_data[[pred_col_name]] <- as.numeric(
+      predict(model, newdata = fit_data, type = "vector")
+    )
+    external_test_fold <- external_test
+    external_test_fold[[pred_col_name]] <- as.numeric(
+      predict(model, newdata = external_test_fold, type = "vector")
+    )
+
+    data.frame(
+      fold = fold,
+      fold_seed = fold_seed,
+      fit_periods = nrow(fit_data),
+      held_out_periods = nrow(held_out),
+      test_periods = nrow(external_test_fold),
+      cp = grid_search$best_params$cp,
+      minbucket = grid_search$best_params$minbucket,
+      maxdepth = grid_search$best_params$maxdepth,
+      train_lift = tree_alert_compute_lift_numeric(
+        df = fit_data,
+        actual_col = actual_col,
+        pred_col = pred_col_name,
+        n_groups = n_groups,
+        lift_metric = lift_metric
+      ),
+      test_lift = tree_alert_compute_lift_numeric(
+        df = external_test_fold,
+        actual_col = actual_col,
+        pred_col = pred_col_name,
+        n_groups = n_groups,
+        lift_metric = lift_metric
+      )
+    )
+  })
+
+  list(
+    results = do.call(rbind, fold_results),
+    fold_id = fold_id,
+    fold_seed = fold_seed,
+    n_folds = n_folds,
+    n_groups = n_groups,
+    lift_metric = lift_metric
+  )
+}
+
+tree_alert_make_lift_boxplot <- function(cv_results,
+                                         image_path = NULL,
+                                         width = 10,
+                                         height = 3.2,
+                                         dpi = 1000) {
+  required_cols <- c("train_lift", "test_lift")
+  missing_cols <- setdiff(required_cols, names(cv_results))
+  if (length(missing_cols) > 0) {
+    stop(
+      "cv_results is missing required columns: ",
+      paste(missing_cols, collapse = ", ")
+    )
+  }
+
+  plot_data <- tidyr::pivot_longer(
+    cv_results,
+    cols = dplyr::all_of(required_cols),
+    names_to = "evaluation",
+    values_to = "lift"
+  )
+  plot_data$evaluation <- factor(
+    plot_data$evaluation,
+    levels = c("train_lift", "test_lift"),
+    labels = c("Training", "Fixed test")
+  )
+
+  lower_whiskers <- plot_data |>
+    dplyr::group_by(evaluation) |>
+    dplyr::summarise(
+      lower = boxplot.stats(lift)$stats[1],
+      first_quartile = quantile(lift, 0.25, na.rm = TRUE),
+      .groups = "drop"
+    )
+
+  max_lift <- max(plot_data$lift, na.rm = TRUE)
+  upper_limit <- max(3, ceiling(max_lift * 5) / 5)
+  major_breaks <- seq(1, upper_limit, by = 0.2)
+  minor_breaks <- seq(1, upper_limit, by = 0.1)
+
+  lift_plot <- ggplot2::ggplot(
+    plot_data,
+    ggplot2::aes(x = lift, y = evaluation, fill = evaluation)
+  ) +
+    ggplot2::geom_boxplot(
+      width = 0.55,
+      coef = 0,
+      outlier.shape = NA
+    ) +
+    ggplot2::geom_errorbar(
+      data = lower_whiskers,
+      ggplot2::aes(
+        xmin = lower,
+        xmax = first_quartile,
+        y = evaluation
+      ),
+      orientation = "y",
+      width = 0.15,
+      inherit.aes = FALSE
+    ) +
+    ggplot2::geom_jitter(width = 0.08, height = 0.08, alpha = 0.65) +
+    ggplot2::geom_vline(
+      xintercept = 1,
+      linetype = "dashed",
+      colour = "red"
+    ) +
+    ggplot2::scale_x_continuous(
+      breaks = major_breaks,
+      minor_breaks = minor_breaks,
+      labels = function(x) sprintf("%.1f", x)
+    ) +
+    ggplot2::scale_y_discrete(drop = FALSE) +
+    ggplot2::theme_bw(base_size = 13) +
+    ggplot2::theme(
+      legend.position = "none",
+      axis.title.x = ggplot2::element_text(size = 11, face = "plain"),
+      axis.text.x = ggplot2::element_text(size = 11),
+      axis.text.y = ggplot2::element_text(size = 11),
+      panel.grid.minor.x = ggplot2::element_line(colour = "grey90")
+    ) +
+    ggplot2::labs(x = "First-Ventile Lift", y = NULL)
+
+  if (!is.null(image_path)) {
+    ggplot2::ggsave(
+      filename = image_path,
+      plot = lift_plot,
+      width = width,
+      height = height,
+      dpi = dpi
+    )
+  }
+
+  list(
+    plot = lift_plot,
+    data = plot_data,
+    lower_whiskers = lower_whiskers
   )
 }

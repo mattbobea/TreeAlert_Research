@@ -25,8 +25,8 @@ Configuration
 # Probabilistic-score analyses are in Heart_Rate_Probabilistic_Main.Rmd.
 analysis_choice_label <- "point_forecast"
 analysis_target_label <- "Forecast Error"
-lift_metric <- "rmse"
-heart_output_prefix <- "hr_rmse"
+lift_metric <- "mean_abs"
+heart_output_prefix <- "hr_mae"
 
 n_groups <- 20
 n_rules <- 3
@@ -66,7 +66,7 @@ heart_data_1 <- readRDS(file.path(heart_dir, "HR_data", "heart_combined.rds"))
 
 Prepare Data
 ```{r}
-message("Analysis target: original point-forecast residuals with RMSE lift")
+message("Analysis target: original point-forecast residuals with MAE lift")
 analysis_data <- heart_data_1
 
 # ============================================================
@@ -493,7 +493,7 @@ Update Results Summary
 ```{r, warning=FALSE, message=FALSE}
 tree_alert_update_results_summary(
   output_path = file.path(if (dir.exists("TA_functions")) "." else "..", "Results", "TreeAlert_results_summary.md"),
-  section_id = "heart_rate_rmse",
+  section_id = "heart_rate_mae",
   title = "Heart Rate: Point-Forecast Residuals",
   analysis_choice = analysis_choice_label,
   analysis_target = analysis_target_label,
@@ -519,7 +519,7 @@ tree_alert_update_results_summary(
       "train_lift", "test_lift", "visualization",
       "hyperparameter_train", "hyperparameter_test",
       "split_train", "split_test",
-      "k_rule", "threshold"
+      "k_rule", "threshold", "kfold_cv"
     ),
     path = c(
       file.path(heart_image_dir, heart_image_file("lift_train.png")),
@@ -530,8 +530,42 @@ tree_alert_update_results_summary(
       file.path(heart_sensitivity_image_dir, heart_image_file("split_sensitivity_train_lift.png")),
       file.path(heart_sensitivity_image_dir, heart_image_file("split_sensitivity_test_lift.png")),
       file.path(heart_sensitivity_image_dir, heart_image_file("k_rule_sensitivity_lift.png")),
-      file.path(heart_sensitivity_image_dir, heart_image_file("threshold_sensitivity_lift.png"))
+      file.path(heart_sensitivity_image_dir, heart_image_file("threshold_sensitivity_lift.png")),
+      file.path(heart_image_dir, heart_image_file("kfold_cv_lift.png"))
     )
   )
 )
+```
+
+20-Fold Cross-Validation
+```{r, warning=FALSE, message=FALSE}
+hr_cv <- tree_alert_kfold_cross_validation(
+  train_set = train_set,
+  test_set = test_set,
+  formula = final_formula,
+  param_grid = param_grid,
+  n_folds = 20,
+  n_groups = n_groups,
+  lift_metric = lift_metric,
+  fold_seed = 3001L
+)
+
+hr_cv_results <- hr_cv$results
+hr_results_dir <- file.path(heart_dir, "results")
+dir.create(hr_results_dir, showWarnings = FALSE, recursive = TRUE)
+write.csv(
+  hr_cv_results,
+  file.path(hr_results_dir, "heart_rate_kfold_cv_lift.csv"),
+  row.names = FALSE
+)
+hr_cv_results
+```
+
+First-Ventile Lift Cross-Validation Boxplot
+```{r, warning=FALSE, message=FALSE}
+hr_cv_boxplot <- tree_alert_make_lift_boxplot(
+  cv_results = hr_cv_results,
+  image_path = file.path(heart_image_dir, heart_image_file("kfold_cv_lift.png"))
+)
+hr_cv_boxplot$plot
 ```
