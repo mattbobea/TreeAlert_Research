@@ -16,8 +16,8 @@ library(ggplot2); library(ggtext); library(grid); library(gridExtra) # Plotting
 library(slider); library(scales); library(rpart); library(rpart.plot);
 ta_root <- c(".", "..", "../..")
 ta_root <- ta_root[file.exists(file.path(ta_root, "TA_functions", "TA_functions.R"))][1]
-source(file.path(ta_root, "TA_functions", "TA_functions.R"))
-source(file.path(ta_root, "TA_functions", "Rephrase_Rule_Func.R"))
+source(file.path(ta_root, "TA_functions", "TA_functions.R"), local = TRUE)
+source(file.path(ta_root, "TA_functions", "Rephrase_Rule_Func.R"), local = TRUE)
 # library(caret)
 ```
 

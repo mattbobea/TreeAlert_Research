@@ -19,8 +19,8 @@ image_dir <- file.path(simulation_dir, "images", "sensitivity")
 dir.create(results_dir, showWarnings = FALSE, recursive = TRUE)
 dir.create(image_dir, showWarnings = FALSE, recursive = TRUE)
 
-source(file.path(root_dir, "TA_functions", "TA_functions.R"))
-source(file.path(root_dir, "TA_functions", "Rephrase_Rule_Func.R"))
+source(file.path(root_dir, "TA_functions", "TA_functions.R"), local = TRUE)
+source(file.path(root_dir, "TA_functions", "Rephrase_Rule_Func.R"), local = TRUE)
 source(file.path(simulation_dir, "code", "generate_actual_and_forecasts_data.R"))
 ```
 

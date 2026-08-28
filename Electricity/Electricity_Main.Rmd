@@ -15,8 +15,8 @@ library(dplyr); library(lubridate) # For Data Wrangling
 library(ggplot2); library(ggtext); library(grid); library(gridExtra); # Plot
 library(slider) # Plot
 library(scales); library(rpart);  library(rpart.plot);
-source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "TA_functions.R"))
-source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "Rephrase_Rule_Func.R"))
+source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "TA_functions.R"), local = TRUE)
+source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "Rephrase_Rule_Func.R"), local = TRUE)
 ```
 
 Configuration
@@ -150,7 +150,25 @@ elec_image_dir <- file.path(elec_dir, "images")
 elec_sensitivity_image_dir <- file.path(elec_image_dir, "sensitivity")
 dir.create(elec_image_dir, showWarnings = FALSE, recursive = TRUE)
 dir.create(elec_sensitivity_image_dir, showWarnings = FALSE, recursive = TRUE)
-raw_data <- read.csv(file.path(elec_dir, "Elec_data", "time_series_15min_singleindex.csv")) %>%
+elec_data_path <- file.path(elec_dir, "Elec_data", "time_series_15min_singleindex.csv")
+if (!file.exists(elec_data_path) && file.exists(paste0(elec_data_path, ".gz"))) {
+  elec_data_path <- paste0(elec_data_path, ".gz")
+}
+if (!file.exists(elec_data_path)) {
+  stop("Electricity data not found. Expected time_series_15min_singleindex.csv or .csv.gz in Elec_data.")
+}
+read_electricity_data <- function(path) {
+  # Keep timestamps as character strings so parse_date_time() below handles
+  # the mixed timestamp formats exactly as in the original paper analysis.
+  if (grepl("\\.gz$", path, ignore.case = TRUE)) {
+    connection <- gzfile(path, open = "rt")
+    on.exit(close(connection), add = TRUE)
+    read.csv(connection, stringsAsFactors = FALSE, check.names = FALSE)
+  } else {
+    read.csv(path, stringsAsFactors = FALSE, check.names = FALSE)
+  }
+}
+raw_data <- read_electricity_data(elec_data_path) %>%
   slice(-(1:5))
 ```
 
@@ -345,14 +363,14 @@ best_train_results <- tree_alert_compute_lift(
   lift_label = "First Ventile",
   axis_title_size = 24, axis_text_x_size = 24, axis_text_y_size = 24
 )
- ggsave(file.path(elec_image_dir, "Electricity_Lift_Train.png"), plot = last_plot(), width = 8, height = 6, dpi = 1200)
+ ggsave(file.path(elec_image_dir, "Electricity_Lift_Train.png"), plot = last_plot(), width = 8, height = 6, dpi = 1200, bg = "white")
 best_test_results <- tree_alert_compute_lift(
   test_set, best_tree_model, "Leaf_Node", "Best Model (Test)",
   plot = TRUE, n_groups = n_groups,
   lift_label = "First Ventile",
   axis_title_size = 24, axis_text_x_size = 24, axis_text_y_size = 24
 )
- ggsave(file.path(elec_image_dir, "Electricity_Lift_Test.png"), plot = last_plot(), width = 8, height = 6, dpi = 1200)
+ ggsave(file.path(elec_image_dir, "Electricity_Lift_Test.png"), plot = last_plot(), width = 8, height = 6, dpi = 1200, bg = "white")
 ```
 
 Top Rules
@@ -512,8 +530,11 @@ residual_plot
 
 two_plots <- grid.arrange(actual_predicted_plot, residual_plot, ncol = 1)
 # Export the plot
-ggsave(file.path(elec_image_dir, "Electricity5.png"), 
-       plot = two_plots, width = 6, height = 4.5, dpi = 800) 
+ggsave(file.path(elec_image_dir, "Electricity.png"),
+       plot = two_plots, width = 6, height = 4.5, dpi = 800, bg = "white")
+# Keep the historical filename for backwards compatibility with older reports.
+ggsave(file.path(elec_image_dir, "Electricity5.png"),
+       plot = two_plots, width = 6, height = 4.5, dpi = 800, bg = "white")
 ```
 
 Metrics

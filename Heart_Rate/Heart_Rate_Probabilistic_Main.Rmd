@@ -14,8 +14,8 @@ library(tsibble); library(fable); library(fabletools) # Forecasting
 library(dplyr); library(lubridate) # Wrangling
 library(ggplot2); library(ggtext); library(grid); library(gridExtra) # Plotting
 library(slider); library(scales); library(rpart); library(rpart.plot); 
-source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "TA_functions.R"))
-source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "Rephrase_Rule_Func.R"))
+source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "TA_functions.R"), local = TRUE)
+source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "Rephrase_Rule_Func.R"), local = TRUE)
 # library(caret)
 ```
 

@@ -14,8 +14,8 @@ library(tsibble); library(fable); library(fabletools) # Forecasting
 library(dplyr); library(lubridate) # Wrangling
 library(ggplot2); library(ggtext); library(grid); library(gridExtra) # Plotting
 library(slider); library(scales); library(rpart); library(rpart.plot); 
-source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "TA_functions.R"))
-source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "Rephrase_Rule_Func.R"))
+source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "TA_functions.R"), local = TRUE)
+source(file.path(if (dir.exists("TA_functions")) "." else "..", "TA_functions", "Rephrase_Rule_Func.R"), local = TRUE)
 # library(caret)
 ```
 
@@ -181,7 +181,7 @@ best_train <- tree_alert_compute_lift(
   lift_metric = lift_metric,
   axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
 )
-ggsave(file.path(heart_image_dir, heart_image_file("lift_train.png")), plot = last_plot(), width = 8, height = 6, dpi = 1000)
+ggsave(file.path(heart_image_dir, heart_image_file("lift_train.png")), plot = last_plot(), width = 8, height = 6, dpi = 1000, bg = "white")
 best_test <- tree_alert_compute_lift(
   test_set, best_tree_model, "Pred_Best", "Best Model (Test)",
   plot = TRUE, n_groups = n_groups,
@@ -189,7 +189,7 @@ best_test <- tree_alert_compute_lift(
   lift_metric = lift_metric,
   axis_title_size = 20, axis_text_x_size = 18, axis_text_y_size = 20
 )
-ggsave(file.path(heart_image_dir, heart_image_file("lift_test.png")), plot = last_plot(), width = 8, height = 6, dpi = 1000)
+ggsave(file.path(heart_image_dir, heart_image_file("lift_test.png")), plot = last_plot(), width = 8, height = 6, dpi = 1000, bg = "white")
 ```
 
 Top Rules
@@ -367,8 +367,8 @@ two_plots <- grid.arrange(actual_predicted_plot, residual_plot, ncol = 1)
 # Export the plot
 #ggsave("HeartRate.png", 
 #       plot = two_plots, width = 6, height = 4, dpi = 800) 
-ggsave(file.path(heart_image_dir, heart_image_file("viz.png")), 
-       plot = two_plots, width = 6, height = 4.5, dpi = 800)
+ggsave(file.path(heart_image_dir, heart_image_file("viz.png")),
+       plot = two_plots, width = 6, height = 4.5, dpi = 800, bg = "white")
 ```
 Metrics
 ```{r}
