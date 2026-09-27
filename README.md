@@ -1,15 +1,13 @@
-# TreeAlert reproduction guide
+# TreeAlert reproducibility guide
 
-This guide reproduces the empirical demonstrations in Section 4 of the paper
-and the supporting analyses in Appendices A–E. The introduction, conceptual
-scenarios, and other material before Section 4 are not intended to be
-reproduced. The optional Section 3.5 rule-visualization illustration is
-covered separately below.
+This repository contains the code and data for the TreeAlert demonstrations
+and supporting analyses in the paper. All commands below use paths relative to
+the repository root; they do not depend on the original author's computer.
 
-## 1. Setup
+## Quick start
 
-Run commands from the repository root. Use R 4.x and install the packages
-listed in `reproduce_examples.R`:
+Install R 4.4.2 or a compatible R 4.x release. Then install the packages used
+by the tested environment:
 
 ```r
 install.packages(c(
@@ -19,277 +17,96 @@ install.packages(c(
 ))
 ```
 
-The shared TreeAlert implementation is in `TA_functions/TA_functions.R` and
-the rule-interpretation functions are in `TA_functions/Rephrase_Rule_Func.R`.
-The analyses use fixed seeds where resampling or simulation is involved.
-
-## 2. Section 4 — Demonstrations of TreeAlert
-
-### 2.1 Example 1 — Electricity demand
-
-Source analysis: `Electricity/Electricity_Main.Rmd`
-
-Input data: `Electricity/Elec_data/time_series_15min_singleindex.csv.gz`
-
-The script reads the compressed file automatically. If an uncompressed file
-named `time_series_15min_singleindex.csv` is present, it is used instead.
-
-Run the electricity analysis as part of the complete reproduction command:
+From the repository root, reproduce the main electricity and heart-rate
+analyses, including sensitivity and cross-validation outputs:
 
 ```text
 Rscript reproduce_examples.R
 ```
 
-The analysis uses the Germany–Luxembourg load and operational forecast
-columns, constructs temporal features, partitions the series chronologically,
-fits the TreeAlert regression tree, extracts the retained rules, and computes
-lift and sensitivity results.
-
-Generated analysis outputs are written to:
-
-- Figures: `Electricity/images/`
-- Sensitivity figures: `Electricity/images/sensitivity/`
-- Cross-validation results: `Electricity/results/electricity_kfold_cv_lift.csv`
-- Training-sample validation results: `Electricity/results/electricity_training_sample_cv_lift.csv`
-
-The figures used in the submission PDF are synchronized to
-`Latex_Files/Figures/`, including:
-
-| Paper content | Generated source | LaTeX asset |
-|---|---|---|
-| Electricity series and errors | `Electricity/images/Electricity.png` | `Latex_Files/Figures/Electricity.png` |
-| Training/test lift | `Electricity/images/Electricity_Lift_Train.png`, `Electricity_Lift_Test.png` | `Latex_Files/Figures/Electricity_Lift_Train.png`, `Electricity_Lift_Test.png` |
-| 20-fold lift distributions | `Electricity/images/electricity_kfold_cv_lift.png` | `Latex_Files/Figures/electricity_kfold_cv_lift.png` |
-| Hyperparameter sensitivity | `Electricity/images/sensitivity/elec_*sensitivity*_lift.png` | corresponding `Latex_Files/Figures/elec_*` assets |
-| Split, rule-count, and quantile sensitivity | `Electricity/images/sensitivity/elec_*_lift.png` | corresponding `Latex_Files/Figures/elec_*` assets |
-
-### 2.2 Example 2 — Heart rate
-
-Source analysis: `Heart_Rate/Heart_Rate_Main.Rmd`
-
-Input data: `Heart_Rate/HR_data/heart_combined.rds`
-
-Run it with:
+Reproduce Appendix A and the Scenario B appendices with:
 
 ```text
-Rscript reproduce_examples.R
+Rscript reproduce_appendices.R
 ```
 
-The analysis uses the point-forecast residual and mean-absolute-error lift
-setting reported in Section 4.2. It constructs temporal and contextual
-features, performs the chronological split, fits TreeAlert, extracts rules,
-and computes lift and sensitivity results.
+The Scenario B wrapper creates its generated-data directory automatically.
+Set `SCENARIO_B_REPLICATION_SEEDS` to a comma-separated list to run selected
+replication seeds; the default is `1001:1100`.
 
-Generated outputs are written to:
+## Tested environment
 
-- Figures: `Heart_Rate/images/`
-- Sensitivity figures: `Heart_Rate/images/sensitivity/`
-- Cross-validation results: `Heart_Rate/results/heart_rate_kfold_cv_lift.csv`
-- Training-sample validation results: `Heart_Rate/results/heart_rate_training_sample_cv_lift.csv`
+The successful validation run used R 4.4.2 and these package versions:
 
-The main-paper assets are synchronized to `Latex_Files/Figures/`:
+| Package | Version | Package | Version |
+|---|---:|---|---:|
+| readr | 2.1.5 | tidyr | 1.3.1 |
+| feasts | 0.4.1 | tsibble | 1.1.6 |
+| fable | 0.4.1 | fabletools | 0.5.0 |
+| dplyr | 1.1.4 | lubridate | 1.9.4 |
+| ggplot2 | 3.5.1 | ggtext | 0.1.2 |
+| gridExtra | 2.3 | slider | 0.3.2 |
+| scales | 1.3.0 | rpart | 4.1.23 |
+| rpart.plot | 3.1.2 | rmarkdown | 2.29 |
+| knitr | 1.49 | forecast | 8.23.0 |
 
-| Paper content | Generated source | LaTeX asset |
-|---|---|---|
-| Heart-rate series and errors | `Heart_Rate/images/hr_mae_viz.png` | `Latex_Files/Figures/hr_viz.png` |
-| Training/test lift | `Heart_Rate/images/hr_mae_lift_train.png`, `hr_mae_lift_test.png` | `Latex_Files/Figures/HR_Lift_Train.png`, `HR_Lift_Test.png` |
-| 20-fold lift distributions | `Heart_Rate/images/hr_mae_kfold_cv_lift.png` | `Latex_Files/Figures/hr_mae_kfold_cv_lift.png` |
-| Hyperparameter, split, rule-count, and quantile sensitivity | `Heart_Rate/images/sensitivity/hr_mae_*` | corresponding `Latex_Files/Figures/hr_*` assets |
+Package updates can change numerical results or figure rendering. For exact
+replication, use the versions above. The complete recorded session is in
+`reproduction_session_info.txt`.
 
-## 3. Optional Section 3.5 illustration
+## Repository map
 
-The additional rule-selection/visualization illustration is not required for
-the main Section 4 reproduction. The current paper’s implementation is
-represented by the electricity and heart-rate analysis objects and the
-alternative positive/negative rule example in
-`Electricity/Appendix_Elect__positive_Negative_Rules.Rmd`.
+- `Electricity/`: electricity data, analysis, figures, and result tables.
+- `Heart_Rate/`: point-forecast and probabilistic heart-rate analyses.
+- `Simulation_Scenario_B/`: Scenario B data generator, analyses, and outputs.
+- `TA_functions/`: shared TreeAlert and rule-interpretation functions.
+- `reproduce_examples.R`: main examples, sensitivity analyses, and Appendix C/D outputs.
+- `reproduce_appendices.R`: Appendix A and Appendix E workflows.
+- `Latex_Files/JBA/R1/`: R1 manuscript source and LaTeX build assets.
+- `Latex_Files/Figures/`: figures synchronized for the manuscript.
+- `APPENDIX_REPRODUCIBILITY.md`: appendix-specific instructions and limitations.
 
-That legacy file contains historical absolute paths and should be treated as
-an optional reference rather than the primary reproduction entry point. The
-portable shared functions used by the paper are in `TA_functions/`.
+## Data and outputs
 
-## 4. Appendix A — Probabilistic forecasting of heart rate
+The electricity input is tracked as
+`Electricity/Elec_data/time_series_15min_singleindex.csv.gz`; the analysis
+loads it automatically. Heart-rate inputs are under `Heart_Rate/HR_data/`.
 
-Source: `Heart_Rate/Heart_Rate_Probabilistic_Main.Rmd`
+Generated analysis outputs are written to the corresponding `images/` and
+`results/` directories. The main reproduction script also synchronizes the
+figures used by the manuscript into `Latex_Files/Figures/`.
 
-Inputs:
+## Appendix coverage
 
-- `Heart_Rate/HR_data/heart_combined.rds`
-- `Heart_Rate/HR_data/heart_new_data.rds`
+- Appendix A: probabilistic heart-rate forecasting; reproduced by
+  `reproduce_appendices.R`.
+- Appendix B: positive/negative electricity-rule selection. The repository
+  retains the historical source and assets, but that legacy R Markdown file
+  contains non-portable paths and requires manual path replacement.
+- Appendix C: sensitivity analyses; reproduced by `reproduce_examples.R`.
+- Appendix D: randomized 20-fold cross-validation; reproduced by
+  `reproduce_examples.R`.
+- Appendix E: Scenario B simulation, cross-validation, and replication
+  sensitivity; reproduced by `reproduce_appendices.R`.
 
-Set `PROB_SCORE <- "winkler_score"` for the paper’s Winkler-score analysis,
-then render the R Markdown file from the repository root. The script writes
-the probabilistic figures to `Heart_Rate/images/`, using the
-`hr_winkler_score_` prefix. The corresponding submission assets are
-`Latex_Files/Figures/winkler_lift_train_tf.jpg`,
-`winkler_lift_test_tf.jpg`, and `winkler_full.png`.
+## Rebuilding the paper
 
-The electricity application does not have a probabilistic reproduction because
-the source operational forecasts are point forecasts and the forecasting model
-is not disclosed.
-
-## 5. Appendix B — Rule selection for over- and under-forecasting
-
-Appendix B is a rule-selection variant of the electricity analysis. It retains
-the strongest positive and negative mean-error terminal nodes separately. The
-underlying rule extraction and interpretation functions are in
-`TA_functions/TA_functions.R` and `TA_functions/Rephrase_Rule_Func.R`.
-
-The appendix assets are:
-
-- Rules: `Latex_Files/Figures/Elec_3x3_both.png` and the corresponding table in
-  `Latex_Files/JBA_R1.tex`
-- Supporting electricity figures: `Latex_Files/Figures/elec_actual_predicted.png`,
-  `elec_residual_plot.png`, and `Elec_3x3_actual_fit.png`
-
-Because the historical Appendix B R Markdown file contains non-portable paths,
-the README should be used with the portable main electricity analysis and the
-shared rule-selection functions when recreating this appendix.
-
-## 6. Appendix C — Sensitivity analysis
-
-Appendix C is generated from the sensitivity sections of the main analysis
-files. It covers:
-
-1. Tree hyperparameters (`cp`, minimum bucket size, and maximum depth)
-2. Temporal train/test split choices
-3. Temporal feature granularity
-4. Number of retained rules (`k`)
-5. Top-quantile size used for lift evaluation
-
-Run:
+After generating the figures, build the R1 manuscript from the repository root:
 
 ```text
-Rscript reproduce_examples.R
-```
-
-The source figures are saved under:
-
-- `Electricity/images/sensitivity/`
-- `Heart_Rate/images/sensitivity/`
-
-The synchronized appendix assets are the `elec_*` and `hr_*` sensitivity
-figures in `Latex_Files/Figures/`. The feature-granularity values displayed in
-the appendix table are produced by the feature-sensitivity objects in the two
-main R Markdown analyses.
-
-## 7. Appendix D — Randomized 20-fold cross-validation
-
-The shared implementation is `tree_alert_kfold_cross_validation()` in
-`TA_functions/TA_functions.R`. The main analyses call it with:
-
-- `n_folds = 20`
-- `n_groups = 20`
-- fixed `fold_seed = 3001`
-- mean-absolute-error lift
-- an unchanged external test set across folds
-
-The complete reproduction command is:
-
-```text
-Rscript reproduce_examples.R
-```
-
-CSV summaries are written to:
-
-- `Electricity/results/electricity_kfold_cv_lift.csv`
-- `Heart_Rate/results/heart_rate_kfold_cv_lift.csv`
-
-The corresponding figures are `electricity_kfold_cv_lift.png` and
-`hr_mae_kfold_cv_lift.png` in both the analysis image directories and the
-LaTeX figure directory.
-
-## 8. Appendix E — Scenario B lunar-calendar simulation
-
-Representative simulation source:
-`Simulation_Scenario_B/code/B_Simulation_Main.Rmd`
-
-Cross-validation source:
-`Simulation_Scenario_B/code/run_scenario_b_cv.R`
-
-Replication-sensitivity source:
-`Simulation_Scenario_B/code/B_Simulation_Sensitivity.Rmd`
-
-The data-generating process is implemented in
-`Simulation_Scenario_B/code/generate_actual_and_forecasts_data.R`. It records
-the generated weekly series and ARIMA metadata under
-`Simulation_Scenario_B/data/`.
-
-Run the representative study from the repository root by rendering
-`B_Simulation_Main.Rmd`. Run the 20-fold cross-validation with:
-
-```text
-Rscript Simulation_Scenario_B/code/run_scenario_b_cv.R
-```
-
-Run the broader replication sensitivity analysis by rendering
-`Simulation_Scenario_B/code/B_Simulation_Sensitivity.Rmd`. Set
-`SCENARIO_B_REPLICATION_SEEDS` to a comma-separated list to control the
-replication seeds.
-
-Outputs are written to:
-
-- Data: `Simulation_Scenario_B/data/`
-- Results: `Simulation_Scenario_B/results/`
-- Figures: `Simulation_Scenario_B/images/`
-- Paper assets: `Latex_Files/Figures/scenario_b_*.png`
-
-Important reproducibility parameters are recorded in
-`scenario_b_arima_metadata.csv`, `scenario_b_cv_seeds.csv`, and the generated
-cross-validation CSV files. The representative paper values should be checked
-against the current manuscript after running the scripts, because changing the
-simulation seed, ARIMA implementation, or aggregation convention changes the
-results.
-
-## 9. Rebuilding the submission PDF
-
-After regenerating the figures, compile the manuscript from `Latex_Files/`:
-
-```text
-cd Latex_Files
+cd Latex_Files/JBA/R1
 latexmk -pdf JBA_R1.tex
 ```
 
-The source archive for Overleaf is `Latex_Files/JBA_R1_Overleaf.zip`. The
-pre-generated figures are included so the manuscript can be compiled without
-first running the R analyses.
+The LaTeX source and bibliography style are in that directory. The manuscript
+uses figures from `../../Figures/`.
 
-## 10. Reproduction validation
+## Validation
 
-The validation checklist is:
+The electricity reproduction should select `cp = 0`, minimum bucket size 4,
+and maximum depth 8, with first-ventile lift of approximately 1.693870 in
+training and 1.381551 in testing. The paper reports these as 1.69 and 1.38.
 
-1. Run `Rscript reproduce_examples.R` from a clean R session.
-2. Confirm that each generated paper figure is byte-identical to its
-   synchronized copy in `Latex_Files/Figures/`.
-3. Compare the generated rule tables, selected hyperparameters, flagged-period
-   counts, lift values, and cross-validation summaries with the values in
-   `Latex_Files/JBA_R1.tex`.
-4. Run the Scenario B scripts and compare its generated data, selected rules,
-   lift values, and 20-fold distributions with Appendix E.
-5. Compile `JBA_R1.tex` and confirm that all figure paths resolve.
-
-`reproduce_examples.R` records the local R and package versions in
-`reproduction_session_info.txt` after a successful run.
-
-### Current validation status
-
-The main-example render completed successfully in a clean R session. The
-generated figures were byte-identical to the synchronized copies used by
-`JBA_R1.tex`, and all manuscript image paths resolved.
-
-The electricity analysis now reproduces the manuscript values: 2,119 training
-observations, 696 test observations, selected parameters `cp = 0`, minimum
-bucket size 4, maximum depth 8, and first-ventile lift 1.693870 in training
-and 1.381551 in testing (reported in the paper as 1.69 and 1.38). Its
-20-fold summary matches Appendix D to the reported precision.
-
-The current heart-rate analysis produces 3,240 training observations, 572 test
-observations, training lift 2.63, and test lift 2.85, matching the rounded
-values reported in Section 4.2. The heart-rate 20-fold summary also matches
-the appendix values to the reported precision.
-
-The Scenario B representative outputs reproduce the reported rounded values:
-731 training observations, 157 test observations, training lift 2.25, and test
-lift 2.16. Its seed and ARIMA metadata are retained in
-`Simulation_Scenario_B/data/` and its cross-validation results are retained in
-`Simulation_Scenario_B/results/`.
+The scripts use fixed seeds for resampling and simulation. Compare generated
+parameters, lift values, rule tables, CSV summaries, and figures with the
+reported paper outputs when validating a new environment.
