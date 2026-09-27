@@ -39,7 +39,8 @@ n_groups <- 20
 n_rules <- 4
 lift_metric <- "rmse"
 analysis_id <- "no_iso_week_depth_7"
-tree_formula <- .resid ~ Day + WeekofMonth + Month
+# Use predictors created by the shared Scenario B data generator.
+tree_formula <- .resid ~ WeekofYear + Month
 
 param_grid <- expand.grid(
   cp = c(0, 0.00001, 0.0001, 0.0005),

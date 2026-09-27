@@ -11,6 +11,7 @@ simulation_dir <- if (dir.exists("Simulation_Scenario_B")) {
   ".."
 }
 data_dir <- file.path(simulation_dir, "data")
+dir.create(data_dir, recursive = TRUE, showWarnings = FALSE)
 
 simulation_start <- as.Date("2010-01-01")
 simulation_end <- as.Date("2026-12-31")
