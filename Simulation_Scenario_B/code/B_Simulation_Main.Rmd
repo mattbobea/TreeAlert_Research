@@ -38,7 +38,7 @@ fixed_formula <- .resid ~ WeekofYear + Month
 final_formula <- fixed_formula
 
 param_grid <- expand.grid(
-  cp        = c(0, 0.00001, 0.0001),
+  cp        = c(0, 0.00001, 0.0001, 0.0005),
   minbucket = seq(4, 8, by = 1),
   maxdepth  = seq(1, 8, by = 1)
 )
