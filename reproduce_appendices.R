@@ -30,6 +30,11 @@ render_appendix <- function(input) {
 # Appendix A: probabilistic heart-rate analysis.
 render_appendix("Heart_Rate/Heart_Rate_Probabilistic_Main.Rmd")
 
+# Appendix B: positive and negative electricity-rule selection.
+status <- system2(file.path(R.home("bin"), "Rscript"),
+                  "Electricity/Appendix_B_positive_negative_rules.R")
+if (!identical(status, 0L)) stop("Appendix B reproduction failed.")
+
 # Appendix E: representative Scenario B analysis and replication sensitivity.
 dir.create("Simulation_Scenario_B/data", recursive = TRUE, showWarnings = FALSE)
 render_appendix("Simulation_Scenario_B/code/B_Simulation_Main.Rmd")
@@ -39,4 +44,4 @@ status <- system2(file.path(R.home("bin"), "Rscript"),
 if (!identical(status, 0L)) stop("Scenario B cross-validation failed.")
 
 render_appendix("Simulation_Scenario_B/code/B_Simulation_Sensitivity.Rmd")
-message("Appendix A and Appendix E reproduction completed.")
+message("Appendix A, Appendix B, and Appendix E reproduction completed.")

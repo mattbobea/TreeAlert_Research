@@ -27,7 +27,8 @@ Run the main electricity and heart-rate analyses, including sensitivity and
 Rscript reproduce_examples.R
 ```
 
-Run the probabilistic heart-rate and Scenario B appendix workflows:
+Run the probabilistic heart-rate, positive/negative electricity-rule, and
+Scenario B appendix workflows:
 
 ```bash
 Rscript reproduce_appendices.R
@@ -47,7 +48,8 @@ Scenario B replication seeds; the default is `1001:1100`.
 - `Simulation_Scenario_B/`: Scenario B simulation and validation workflows.
 - `TA_functions/`: shared TreeAlert functions.
 - `reproduce_examples.R`: main-paper analyses and sensitivity checks.
-- `reproduce_appendices.R`: appendix workflows.
+- `reproduce_appendices.R`: Appendix A, B, and E workflows.
+- `Electricity/Appendix_B_positive_negative_rules.R`: portable Appendix B runner.
 
 All included input data are local to the repository. Generated files can be
 deleted and recreated by rerunning the scripts.
