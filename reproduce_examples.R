@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 # Rebuild the electricity and heart-rate example analyses and synchronize the
-# figures used by Latex_Files/JBA_R1.tex.
+# paper figure assets.
 
 args <- commandArgs(trailingOnly = FALSE)
 file_arg <- grep("^--file=", args, value = TRUE)
